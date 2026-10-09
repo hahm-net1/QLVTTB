@@ -46,6 +46,7 @@ export const OCR_SAMPLE_PRESETS = [
   {
     name: 'Mẫu 1: Phiếu nhập kho (PNK chuẩn: 9325/N/26/KTTC-C1-KH04)',
     type: 'PNK',
+    soChungTu: '9325/N/26/KTTC-C1-KH04',
     text: `TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM
 TRUNG TÂM KỸ THUẬT & DỊCH VỤ VIỄN THÔNG
 PHIẾU NHẬP KHO VẬT TƯ THIẾT BỊ
@@ -57,14 +58,15 @@ Cán bộ kỹ thuật tiếp nhận: Nguyễn Văn Hùng
 Lý do nhập kho: Nhập thu hồi thiết bị sau sửa chữa & kiểm thử định kỳ
 
 BẢNG KÊ THIẾT BỊ VẬT TƯ NHẬP KHO:
-1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | S/N: VNPT26H932501 | Trạng thái kỹ thuật: Tốt | Trạng thái hiện tại: NK tốt
-2. Bộ phát Wifi Mesh iGate EW12SX | Mã VT: MESH-EW12SX | S/N: MESH26E932502 | Trạng thái kỹ thuật: Tốt | Trạng thái hiện tại: NK tốt
-3. ONT GPON iGate GW020 2 Cổng | Mã VT: ONT-GW020 | S/N: GW020VN26932503 | Trạng thái kỹ thuật: Hỏng | Trạng thái hiện tại: NK hỏng
-4. Switch Cisco Catalyst 2960-24TC-L | Mã VT: SW-CISCO-2960 | S/N: FCW2618L932504 | Trạng thái kỹ thuật: Lỗi | Trạng thái hiện tại: Kiểm tra thêm`,
+1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | S/N: VNPT26H932501 | Trạng thái: Tiếp nhận mới
+2. Bộ phát Wifi Mesh iGate EW12SX | Mã VT: MESH-EW12SX | S/N: MESH26E932502 | Trạng thái: Tiếp nhận mới
+3. ONT GPON iGate GW020 2 Cổng | Mã VT: ONT-GW020 | S/N: GW020VN26932503 | Trạng thái: Tiếp nhận mới
+4. Switch Cisco Catalyst 2960-24TC-L | Mã VT: SW-CISCO-2960 | S/N: FCW2618L932504 | Trạng thái: Tiếp nhận mới`,
   },
   {
     name: 'Mẫu 2: Phiếu xuất kho (PXK chuẩn: 14853/X/26/KTTC-C1-KH01)',
     type: 'PXK',
+    soChungTu: '14853/X/26/KTTC-C1-KH01',
     text: `TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM
 TRUNG TÂM KỸ THUẬT & DỊCH VỤ VIỄN THÔNG
 PHIẾU XUẤT KHO THIẾT BỊ ĐIỀU PHỐI
@@ -76,24 +78,8 @@ Người nhận bàn giao: Trần Anh Tuấn
 Ghi chú: Xuất điều phối vật tư thiết bị mạng cho tổ ứng cứu khẩn cấp
 
 BẢNG KÊ DANH MỤC THIẾT BỊ XUẤT KHO:
-1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | S/N: VNPT26X148531 | Tình trạng: Tốt | Trạng thái hiện tại: Đã xuất đi
-2. Bộ phát Wifi Mesh iGate EW12SX AC1200 | S/N: MESH26X148532 | Tình trạng: Tốt | Trạng thái hiện tại: Đã xuất đi
-3. Adapter nguồn 12V - 1.5A chính hãng iGate | S/N: ADP26X148533 | Tình trạng: Tốt | Trạng thái hiện tại: Đã xuất đi`,
-  },
-  {
-    name: 'Mẫu 3: Biên bản bàn giao thiết bị đo kiểm & hàn nối quang',
-    type: 'GUI_MUON',
-    text: `ĐỘI ỨNG CỨU SỰ CỐ & BẢO TRÌ TUYẾN QUANG
-BIÊN BẢN BÀN GIAO GỬI MƯỢN THIẾT BỊ
-Số: 1042/BBBG/26/KTTC-C1
-Ngày lập: 09/10/2026
-Kho xuất: KTTC-C1
-Bên nhận: Phân xưởng Đo kiểm & Sửa chữa Thiết bị số 3
-Cán bộ kỹ thuật phụ trách: Phạm Minh Đức
-Nội dung: Mượn máy hàn quang và dao cắt phục vụ xử lý sự cố đứt cáp
-
-DANH SÁCH THIẾT BỊ BÀN GIAO:
-1. Máy hàn cáp quang Comway C6 kèm pin | S/N: CMW6-2610421 | Trạng thái: Tốt | Trạng thái hiện tại: Đã xuất đi
-2. Dao cắt sợi quang chính xác Sumitomo FC-6S | S/N: FC6S-2610422 | Trạng thái: Tốt | Trạng thái hiện tại: Đã xuất đi`,
+1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | S/N: VNPT26X148531 | Trạng thái: Tiếp nhận mới
+2. Bộ phát Wifi Mesh iGate EW12SX AC1200 | S/N: MESH26X148532 | Trạng thái: Tiếp nhận mới
+3. Adapter nguồn 12V - 1.5A chính hãng iGate | S/N: ADP26X148533 | Trạng thái: Tiếp nhận mới`,
   },
 ];

@@ -83,14 +83,15 @@ Quét ảnh chứng từ hoặc phân tích văn bản để trích xuất đầ
       "tenVT": "Tên đầy đủ thiết bị / quy cách",
       "serialNumber": "Số serial / S/N / IMEI chính xác của thiết bị",
       "trangThaiSauSua": "TOT" | "HONG" | "LOI",
-      "trangThaiHienTai": "NK tốt" | "NK hỏng" | "Kiểm tra thêm" | "Tiếp nhận mới" | "Đã xuất đi" | "Đang sửa chữa"
+      "trangThaiHienTai": "Tiếp nhận mới"
     }
   ]
 }
 
 Quy tắc bắt buộc:
-- Nếu thấy ký hiệu /N/ hoặc chữ N trong số phiếu -> loaiChungTu là "PNK". Với PNK, trạng thái hiện tại của thiết bị: nếu tốt thì "NK tốt", nếu hỏng thì "NK hỏng", nếu lỗi thì "Kiểm tra thêm".
-- Nếu thấy ký hiệu /X/ hoặc chữ X trong số phiếu -> loaiChungTu là "PXK". Với PXK, trạng thái hiện tại có thể là "Đã xuất đi" hoặc theo ghi chú.
+- Nếu thấy ký hiệu /N/ hoặc chữ N trong số phiếu -> loaiChungTu là "PNK".
+- Nếu thấy ký hiệu /X/ hoặc chữ X trong số phiếu -> loaiChungTu là "PXK".
+- QUY TẮC TRƯỜNG TRẠNG THÁI: Tuân thủ như lúc nhập thủ công, trường trangThaiHienTai của mọi vật tư thiết bị BẮT BUỘC luôn luôn chỉ có một trạng thái duy nhất là "Tiếp nhận mới".
 - Serial number phải được bóc tách tỉ mỉ từ từng dòng trong bảng danh mục vật tư.
 - Chỉ trả về đúng JSON hợp lệ, không bọc markdown hay text ngoài JSON.`;
 
@@ -275,15 +276,8 @@ function parseTextFallback(rawText: string) {
       if (/hỏng|cháy|chết|hư/i.test(line)) trangThaiSauSua = 'HONG';
       else if (/lỗi|sét|hỏng cổng|chập/i.test(line)) trangThaiSauSua = 'LOI';
 
-      // Trạng thái hiện tại:
-      let trangThaiHienTai = 'NK tốt';
-      if (loaiChungTu === 'PNK') {
-        if (trangThaiSauSua === 'TOT') trangThaiHienTai = 'NK tốt';
-        else if (trangThaiSauSua === 'HONG') trangThaiHienTai = 'NK hỏng';
-        else trangThaiHienTai = 'Kiểm tra thêm';
-      } else {
-        trangThaiHienTai = 'Đã xuất đi';
-      }
+      // Trạng thái hiện tại: tuân thủ như lúc nhập thủ công chỉ có "Tiếp nhận mới"
+      const trangThaiHienTai = 'Tiếp nhận mới';
 
       let tenVT = 'Thiết bị viễn thông VNPT';
       let maVT = 'VT-GW040';
@@ -326,7 +320,7 @@ function parseTextFallback(rawText: string) {
       tenVT: 'ONT iGate GW040-H Băng tần kép 2.4/5GHz',
       serialNumber: `VNPT24H${Math.floor(100000 + Math.random() * 900000)}`,
       trangThaiSauSua: 'TOT',
-      trangThaiHienTai: loaiChungTu === 'PNK' ? 'NK tốt' : 'Đã xuất đi',
+      trangThaiHienTai: 'Tiếp nhận mới',
     });
   }
 

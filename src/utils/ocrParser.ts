@@ -160,25 +160,8 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
         trangThaiSauSua = 'TOT';
       }
 
-      // Check Trang Thai Hien Tai (theo yêu cầu nghiệp vụ: PNK có các trạng thái NK tốt / NK hỏng / Kiểm tra thêm)
-      let trangThaiHienTai = 'NK tốt';
-      if (result.loaiChungTu === 'PNK') {
-        if (trangThaiSauSua === 'TOT') {
-          trangThaiHienTai = 'NK tốt';
-        } else if (trangThaiSauSua === 'HONG') {
-          trangThaiHienTai = 'NK hỏng';
-        } else {
-          trangThaiHienTai = 'Kiểm tra thêm';
-        }
-      } else {
-        if (/đã xuất đi|đã xuất/i.test(line)) {
-          trangThaiHienTai = 'Đã xuất đi';
-        } else if (/đang sửa/i.test(line)) {
-          trangThaiHienTai = 'Đang sửa chữa';
-        } else {
-          trangThaiHienTai = 'Đã xuất đi';
-        }
-      }
+      // Check Trang Thai Hien Tai: Tuân thủ như lúc nhập thủ công chỉ có trạng thái là "Tiếp nhận mới"
+      const trangThaiHienTai = 'Tiếp nhận mới';
 
       // Match against VNPT equipment catalog
       let matchedCatalog = THIET_BI_MAU.find(
@@ -223,7 +206,7 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
       serialNumber: `VNPT26-${Math.floor(100000 + Math.random() * 900000)}`,
       trangThaiSauSua: 'TOT',
       soPNKHoanTat: '',
-      trangThaiHienTai: result.loaiChungTu === 'PNK' ? 'NK tốt' : 'Đã xuất đi',
+      trangThaiHienTai: 'Tiếp nhận mới',
     });
   }
 
