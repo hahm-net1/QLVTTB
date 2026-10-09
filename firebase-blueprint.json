@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "Voucher": {
+      "title": "Voucher",
+      "description": "Phiếu giao dịch tiếp nhận và quản lý vật tư thiết bị viễn thông",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Mã định danh duy nhất của phiếu" },
+        "soChungTu": { "type": "string", "description": "Số chứng từ phiếu giao dịch" },
+        "loaiChungTu": { "type": "string", "enum": ["PXK", "PNK", "GUI_MUON"], "description": "Loại chứng từ giao dịch" },
+        "ngayTiepNhan": { "type": "string", "description": "Ngày tiếp nhận chứng từ" },
+        "donViLienQuan": { "type": "string", "description": "Đơn vị liên quan hoặc phân bổ" },
+        "canBoTiepNhan": { "type": "string", "description": "Họ tên cán bộ tiếp nhận" },
+        "ghiChu": { "type": "string", "description": "Ghi chú chứng từ" },
+        "danhSachVatTu": { "type": "string", "description": "Danh sách chi tiết vật tư thiết bị đính kèm phiếu" },
+        "createdAt": { "type": "string", "description": "Thời gian tạo phiếu" },
+        "updatedAt": { "type": "string", "description": "Thời gian cập nhật gần nhất" }
+      },
+      "required": ["id", "soChungTu", "loaiChungTu", "ngayTiepNhan", "canBoTiepNhan"]
+    }
+  },
+  "firestore": {
+    "/vouchers/{voucherId}": {
+      "schema": "Voucher",
+      "description": "Bộ sưu tập các chứng từ phiếu giao dịch vật tư thiết bị lưu trữ trên Firestore"
+    }
+  }
+}

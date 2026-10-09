@@ -1,0 +1,10 @@
+{
+  "name": "VNPT QLVTTB - Quản Lý Vật Tư & Sửa Chữa Kỹ Thuật",
+  "description": "Hệ thống quản lý phiếu tiếp nhận, điều phối vật tư, thiết bị viễn thông và theo dõi sửa chữa kỹ thuật Mobile-first phong cách VNPT.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,873 @@
+import React, { useState } from 'react';
+import { 
+  FileText, 
+  Layers, 
+  Plus, 
+  Trash2, 
+  Copy, 
+  Sparkles, 
+  Camera, 
+  Search, 
+  Save, 
+  CheckCircle, 
+  AlertTriangle, 
+  Check, 
+  X,
+  Calendar,
+  Building2,
+  User,
+  Hash,
+  ChevronDown,
+  Info
+} from 'lucide-react';
+import { 
+  PhieuGiaoDich, 
+  ChiTietVatTu, 
+  LoaiChungTu, 
+  TrangThaiSauSua 
+} from '../types';
+import { 
+  getVoucherPrefix, 
+  getTodayDateString, 
+  getTrangThaiSauSuaBadge,
+  formatDateVN 
+} from '../utils/formatters';
+import { 
+  DON_VI_GOI_Y, 
+  CAN_BO_GOI_Y, 
+  TRANG_THAI_HIEN_TAI_OPTIONS 
+} from '../constants/sampleData';
+import { loadVouchers } from '../utils/storage';
+import { EquipmentCatalogModal } from './EquipmentCatalogModal';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
+
+interface VoucherFormProps {
+  initialData?: PhieuGiaoDich | null;
+  existingVouchers?: PhieuGiaoDich[];
+  onSave: (voucher: PhieuGiaoDich) => void;
+  onCancel: () => void;
+  onOpenSmartScan: () => void;
+  onDelete?: (id: string) => void;
+}
+
+export const VoucherForm: React.FC<VoucherFormProps> = ({
+  initialData,
+  existingVouchers,
+  onSave,
+  onCancel,
+  onOpenSmartScan,
+  onDelete,
+}) => {
+  // Master State
+  const [loaiChungTu, setLoaiChungTu] = useState<LoaiChungTu>(
+    initialData?.loaiChungTu || 'PXK'
+  );
+  const [soChungTu, setSoChungTu] = useState<string>(
+    initialData?.soChungTu || ''
+  );
+  const [ngayTiepNhan, setNgayTiepNhan] = useState<string>(
+    initialData?.ngayTiepNhan || getTodayDateString()
+  );
+  const [donViLienQuan, setDonViLienQuan] = useState<string>(
+    initialData?.donViLienQuan || ''
+  );
+  const [canBoTiepNhan, setCanBoTiepNhan] = useState<string>(
+    initialData?.canBoTiepNhan || ''
+  );
+  const [ghiChu, setGhiChu] = useState<string>(initialData?.ghiChu || '');
+
+  // Detail Items State (clean blank default, no sample items)
+  const [danhSachVatTu, setDanhSachVatTu] = useState<ChiTietVatTu[]>(
+    initialData?.danhSachVatTu && initialData.danhSachVatTu.length > 0
+      ? initialData.danhSachVatTu
+      : [
+          {
+            id: `vt-${Date.now()}-1`,
+            maVT: '',
+            tenVT: '',
+            serialNumber: '',
+            trangThaiSauSua: 'TOT',
+            soPNKHoanTat: '',
+            trangThaiHienTai: 'Tiếp nhận mới',
+            ghiChuVatTu: '',
+          },
+        ]
+  );
+
+  // Modals state
+  const [catalogModalIndex, setCatalogModalIndex] = useState<number | null>(null);
+  const [scannerModalIndex, setScannerModalIndex] = useState<number | null>(null);
+  const [showCanBoSuggestions, setShowCanBoSuggestions] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+
+  // Helper get prefix format: PNK- | PXK- | BBBG-
+  const getPrefix = (type: LoaiChungTu): string => {
+    switch (type) {
+      case 'PNK':
+        return 'PNK-';
+      case 'PXK':
+        return 'PXK-';
+      case 'GUI_MUON':
+        return 'BBBG-';
+      default:
+        return 'PXK-';
+    }
+  };
+
+  // Helper check duplicate equipment:
+  // "Cảnh báo đối với những vật tư bị trùng mã VT + tên thiết bị/vật tư + số serial"
+  const getDuplicateInfo = (index: number) => {
+    const item = danhSachVatTu[index];
+    const ma = (item.maVT || '').trim().toLowerCase();
+    const ten = (item.tenVT || '').trim().toLowerCase();
+    const sn = (item.serialNumber || '').trim().toUpperCase();
+
+    // Chỉ kiểm tra khi đã nhập đầy đủ hoặc có dữ liệu cốt lõi
+    if (!ma || !ten || !sn) {
+      return { isDuplicate: false, sameLines: [], otherVouchers: [] };
+    }
+
+    // 1. Trùng lặp trong cùng phiếu hiện tại
+    const sameLines: number[] = [];
+    danhSachVatTu.forEach((other, oIdx) => {
+      if (oIdx !== index) {
+        const oMa = (other.maVT || '').trim().toLowerCase();
+        const oTen = (other.tenVT || '').trim().toLowerCase();
+        const oSn = (other.serialNumber || '').trim().toUpperCase();
+        if (oMa === ma && oTen === ten && oSn === sn) {
+          sameLines.push(oIdx + 1);
+        }
+      }
+    });
+
+    // 2. Trùng lặp với các phiếu khác đã có trên hệ thống
+    const allVouchers = existingVouchers || loadVouchers();
+    const otherVouchers: { soChungTu: string; ngayTiepNhan: string }[] = [];
+
+    allVouchers.forEach((v: PhieuGiaoDich) => {
+      if (initialData && v.id === initialData.id) return;
+      const match = v.danhSachVatTu.some((other: ChiTietVatTu) => {
+        const oMa = (other.maVT || '').trim().toLowerCase();
+        const oTen = (other.tenVT || '').trim().toLowerCase();
+        const oSn = (other.serialNumber || '').trim().toUpperCase();
+        return oMa === ma && oTen === ten && oSn === sn;
+      });
+      if (match) {
+        otherVouchers.push({ soChungTu: v.soChungTu, ngayTiepNhan: v.ngayTiepNhan });
+      }
+    });
+
+    const isDuplicate = sameLines.length > 0 || otherVouchers.length > 0;
+    return {
+      isDuplicate,
+      sameLines,
+      otherVouchers,
+    };
+  };
+
+  // Change voucher type
+  const handleTypeChange = (newType: LoaiChungTu) => {
+    const oldPrefix = getPrefix(loaiChungTu);
+    const newPrefix = getPrefix(newType);
+    setLoaiChungTu(newType);
+    if (!initialData) {
+      if (!soChungTu || soChungTu === oldPrefix || soChungTu === 'PXK-' || soChungTu === 'PNK-' || soChungTu === 'BBBG-') {
+        setSoChungTu('');
+      } else if (soChungTu.startsWith(oldPrefix)) {
+        setSoChungTu(newPrefix + soChungTu.slice(oldPrefix.length));
+      }
+    }
+  };
+
+  // Item handlers
+  const handleAddItem = () => {
+    const newItem: ChiTietVatTu = {
+      id: `vt-${Date.now()}-${danhSachVatTu.length + 1}`,
+      maVT: '',
+      tenVT: '',
+      serialNumber: '',
+      trangThaiSauSua: 'TOT',
+      soPNKHoanTat: '',
+      trangThaiHienTai: 'Tiếp nhận mới',
+      ghiChuVatTu: '',
+    };
+    setDanhSachVatTu([...danhSachVatTu, newItem]);
+  };
+
+  const handleDuplicateItem = (index: number) => {
+    const target = danhSachVatTu[index];
+    const cloned: ChiTietVatTu = {
+      ...target,
+      id: `vt-${Date.now()}-${Math.random()}`,
+      serialNumber: target.serialNumber ? `${target.serialNumber}-COPY` : '',
+    };
+    const updated = [...danhSachVatTu];
+    updated.splice(index + 1, 0, cloned);
+    setDanhSachVatTu(updated);
+  };
+
+  const handleRemoveItem = (index: number) => {
+    if (danhSachVatTu.length === 1) {
+      alert('Phiếu cần có ít nhất 1 dòng chi tiết vật tư.');
+      return;
+    }
+    const updated = danhSachVatTu.filter((_, idx) => idx !== index);
+    setDanhSachVatTu(updated);
+  };
+
+  const handleUpdateItem = (index: number, field: keyof ChiTietVatTu, value: any) => {
+    const updated = [...danhSachVatTu];
+    updated[index] = {
+      ...updated[index],
+      [field]: value,
+    };
+    setDanhSachVatTu(updated);
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const errors: string[] = [];
+
+    if (!soChungTu.trim()) {
+      errors.push(`Vui lòng nhập Số chứng từ (gợi ý dạng ${getPrefix(loaiChungTu)}).`);
+    }
+    if (!canBoTiepNhan.trim()) {
+      errors.push('Vui lòng nhập Cán bộ tiếp nhận.');
+    }
+
+    if (danhSachVatTu.length === 0) {
+      errors.push('Phiếu phải có ít nhất 1 thiết bị/vật tư.');
+    }
+
+    // Check at least equipment name
+    danhSachVatTu.forEach((item, idx) => {
+      if (!item.tenVT.trim()) {
+        errors.push(`Vật tư dòng #${idx + 1} chưa có tên thiết bị.`);
+      }
+    });
+
+    if (errors.length > 0) {
+      setFormErrors(errors);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Kiểm tra và cảnh báo nếu có thiết bị bị trùng thông tin (Mã VT + Tên VT + Serial)
+    const duplicateList = danhSachVatTu
+      .map((_, i) => ({ index: i, info: getDuplicateInfo(i) }))
+      .filter((d) => d.info.isDuplicate);
+
+    if (duplicateList.length > 0) {
+      const dupLineText = duplicateList.map((d) => `#${d.index + 1}`).join(', ');
+      const confirmSave = window.confirm(
+        `⚠️ CẢNH BÁO TRÙNG LẶP VẬT TƯ:\n\n` +
+        `Có ${duplicateList.length} thiết bị (dòng ${dupLineText}) bị trùng thông tin (Mã VT + Tên VT + Số Serial).\n\n` +
+        `Bạn có chắc chắn muốn tiếp tục lưu phiếu này không?`
+      );
+      if (!confirmSave) {
+        return;
+      }
+    }
+
+    setFormErrors([]);
+
+    const payload: PhieuGiaoDich = {
+      id: initialData?.id || `phieu-${Date.now()}`,
+      soChungTu: soChungTu.trim(),
+      loaiChungTu,
+      ngayTiepNhan,
+      donViLienQuan: initialData?.donViLienQuan || donViLienQuan.trim() || 'Chờ phân bổ sau sửa chữa',
+      canBoTiepNhan: canBoTiepNhan.trim(),
+      ghiChu: ghiChu.trim(),
+      danhSachVatTu,
+      createdAt: initialData?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    onSave(payload);
+    // Clear all input fields for next entry
+    setSoChungTu('');
+    setLoaiChungTu('PXK');
+    setNgayTiepNhan(getTodayDateString());
+    setCanBoTiepNhan('');
+    setDonViLienQuan('');
+    setGhiChu('');
+    setDanhSachVatTu([
+      {
+        id: `vt-${Date.now()}-1`,
+        maVT: '',
+        tenVT: '',
+        serialNumber: '',
+        trangThaiSauSua: 'TOT',
+        soPNKHoanTat: '',
+        trangThaiHienTai: 'Tiếp nhận mới',
+        ghiChuVatTu: '',
+      },
+    ]);
+    setSaveSuccessNotice(true);
+    setTimeout(() => setSaveSuccessNotice(false), 3000);
+  };
+
+  // Summary counts
+  const totalItems = danhSachVatTu.length;
+  const duplicateItemsCount = danhSachVatTu.filter((_, idx) => getDuplicateInfo(idx).isDuplicate).length;
+
+  return (
+    <div className="max-w-4xl mx-auto pb-24">
+      {/* Toast alert */}
+      {saveSuccessNotice && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle className="w-5 h-5 text-white" />
+          <span className="text-sm font-bold">Lưu phiếu giao dịch thành công!</span>
+        </div>
+      )}
+
+      {/* Validation alert */}
+      {formErrors.length > 0 && (
+        <div className="mb-4 p-4 bg-rose-50 border border-rose-300 rounded-2xl text-rose-800 text-xs sm:text-sm">
+          <div className="flex items-center gap-2 font-bold mb-1 text-rose-900">
+            <AlertTriangle className="w-4 h-4 text-rose-600" />
+            <span>Vui lòng hoàn thiện các thông tin sau:</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 pl-2">
+            {formErrors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Form Card */}
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* ========================================================
+            PHẦN 1: THÔNG TIN CHUNG CHỨNG TỪ (PHIEU_GIAO_DICH)
+            ======================================================== */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          {/* Header of Section 1 */}
+          <div className="bg-gradient-to-r from-[#004b93] to-[#003870] text-white px-4 sm:px-5 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-[#00a3e0] flex items-center justify-center">
+                <FileText className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h2 className="font-bold text-sm sm:text-base leading-tight">
+                  Phần 1: Thông tin chung chứng từ
+                </h2>
+                <p className="text-[11px] text-cyan-100">
+                  {initialData ? `Đang sửa: ${initialData.soChungTu}` : 'Phiếu giao dịch & tiếp nhận'}
+                </p>
+              </div>
+            </div>
+
+            {/* Header Actions */}
+            <div className="flex items-center gap-2">
+              {/* AI OCR Shortcut */}
+              <button
+                type="button"
+                onClick={onOpenSmartScan}
+                className="flex items-center gap-1.5 bg-[#00a3e0] hover:bg-cyan-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                <span className="hidden sm:inline">Quét AI OCR</span>
+                <span className="sm:hidden">Quét AI</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+            {/* Loại chứng từ */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                <span>Loại chứng từ</span>
+                <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={loaiChungTu}
+                  onChange={(e) => handleTypeChange(e.target.value as LoaiChungTu)}
+                  className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00a3e0] appearance-none"
+                >
+                  <option value="PXK">Phiếu xuất kho</option>
+                  <option value="PNK">Phiếu nhập kho</option>
+                  <option value="GUI_MUON">Gửi/Mượn</option>
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Số chứng từ */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                <Hash className="w-3.5 h-3.5 text-[#004b93]" />
+                <span>Số chứng từ</span>
+                <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={soChungTu}
+                onChange={(e) => setSoChungTu(e.target.value)}
+                placeholder={getPrefix(loaiChungTu)}
+                className="w-full h-11 px-3.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-mono font-bold text-[#004b93] placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-[#00a3e0]"
+              />
+            </div>
+
+            {/* Ngày tiếp nhận */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-[#004b93]" />
+                <span>Ngày tiếp nhận</span>
+                <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={ngayTiepNhan}
+                onChange={(e) => setNgayTiepNhan(e.target.value)}
+                className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00a3e0]"
+              />
+            </div>
+
+            {/* Cán bộ tiếp nhận */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-[#004b93]" />
+                  <span>Cán bộ tiếp nhận</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowCanBoSuggestions(!showCanBoSuggestions)}
+                  className="text-[11px] text-[#00a3e0] font-medium hover:underline cursor-pointer"
+                >
+                  Gợi ý cán bộ
+                </button>
+              </div>
+              <input
+                type="text"
+                value={canBoTiepNhan}
+                onChange={(e) => setCanBoTiepNhan(e.target.value)}
+                placeholder="VD: Nguyễn Văn Hùng"
+                className="w-full h-11 px-3.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00a3e0]"
+              />
+
+              {/* Suggestions Popup */}
+              {showCanBoSuggestions && (
+                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg p-2 space-y-1">
+                  <p className="text-[10px] text-slate-400 font-semibold px-2 py-0.5">Chọn nhanh cán bộ:</p>
+                  {CAN_BO_GOI_Y.map((cb, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setCanBoTiepNhan(cb);
+                        setShowCanBoSuggestions(false);
+                      }}
+                      className="w-full text-left text-xs p-2 rounded-lg hover:bg-slate-100 text-slate-700 truncate cursor-pointer font-medium"
+                    >
+                      {cb}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Ghi chú chung chứng từ - Thiết kế gọn gàng, thuận tiện thao tác trên điện thoại */}
+            <div className="col-span-1 sm:col-span-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5 text-[#004b93]" />
+                  <span>Ghi chú chứng từ</span>
+                </label>
+                <span className="text-[11px] text-slate-400 font-normal">Tùy chọn</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={ghiChu}
+                  onChange={(e) => setGhiChu(e.target.value)}
+                  placeholder="Ghi chú đợt giao nhận, yêu cầu kỹ thuật, bàn giao (VD: Thiết bị thu hồi đợt 1...)"
+                  className="w-full h-11 px-3.5 pr-9 bg-slate-50 focus:bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00a3e0] transition-colors"
+                />
+                {ghiChu && (
+                  <button
+                    type="button"
+                    onClick={() => setGhiChu('')}
+                    className="absolute right-2.5 top-3 text-slate-400 hover:text-slate-600 p-0.5 rounded-full cursor-pointer transition-colors"
+                    title="Xóa nhanh ghi chú"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================
+            PHẦN 2: CHI TIẾT VẬT TƯ GẮN VỚI PHIẾU
+            ======================================================== */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          {/* Header of Section 2 */}
+          <div className="bg-gradient-to-r from-[#003870] to-[#004b93] text-white px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-cyan-400 text-slate-900 flex items-center justify-center font-bold">
+                <Layers className="w-4 h-4 text-[#003870]" />
+              </div>
+              <div>
+                <h2 className="font-bold text-sm sm:text-base leading-tight">
+                  Phần 2: Chi tiết vật tư gắn với phiếu
+                </h2>
+                <p className="text-[11px] text-cyan-100">
+                  Nhập số liệu thiết bị đầu vào tiếp nhận
+                </p>
+              </div>
+            </div>
+
+            {/* Total count badge & duplicate warning badge */}
+            <div className="flex items-center gap-2 text-xs font-bold">
+              {duplicateItemsCount > 0 && (
+                <span className="bg-amber-400 text-slate-900 px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-xs animate-pulse">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>{duplicateItemsCount} vật tư trùng lặp</span>
+                </span>
+              )}
+              <span className="bg-white/20 px-3 py-1 rounded-lg">
+                Tổng: {totalItems} thiết bị
+              </span>
+            </div>
+          </div>
+
+          {/* Cảnh báo tổng thể nếu có vật tư bị trùng thông tin */}
+          {duplicateItemsCount > 0 && (
+            <div className="mx-3 sm:mx-5 mt-3.5 p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="font-bold">Cảnh báo trùng lặp thiết bị: </span>
+                  <span>
+                    Phát hiện <b>{duplicateItemsCount}</b> thiết bị bị trùng cả 3 thông tin <i>(Mã VT + Tên VT + Số Serial)</i>.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Items Container */}
+          <div className="p-3 sm:p-5 space-y-3.5">
+            {danhSachVatTu.map((item, index) => {
+              const dupInfo = getDuplicateInfo(index);
+
+              return (
+                <div
+                  key={item.id}
+                  className={`rounded-2xl p-3.5 sm:p-4 transition-all space-y-3 relative border ${
+                    dupInfo.isDuplicate
+                      ? 'bg-amber-50/60 border-amber-400 ring-1 ring-amber-300 shadow-xs'
+                      : 'bg-slate-50/70 border-slate-200 hover:border-cyan-300'
+                  }`}
+                >
+                  {/* Item Index Bar */}
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center ${
+                          dupInfo.isDuplicate ? 'bg-amber-600' : 'bg-[#004b93]'
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="text-xs font-bold text-slate-800 truncate max-w-[170px] sm:max-w-md">
+                        {item.tenVT || 'Thiết bị mới'}
+                      </span>
+                      {dupInfo.isDuplicate && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Trùng thông tin</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Fast item actions: Pick catalog, Scan S/N, Duplicate, Delete */}
+                    <div className="flex items-center gap-1">
+                      {/* Pick catalog */}
+                      <button
+                        type="button"
+                        onClick={() => setCatalogModalIndex(index)}
+                        className="px-2 py-1 bg-white hover:bg-cyan-50 border border-slate-200 text-[#004b93] text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Chọn từ danh mục chuẩn"
+                      >
+                        <Search className="w-3 h-3 text-[#00a3e0]" />
+                        <span className="hidden sm:inline">Chọn mẫu</span>
+                      </button>
+
+                      {/* Scan Barcode/Serial */}
+                      <button
+                        type="button"
+                        onClick={() => setScannerModalIndex(index)}
+                        className="px-2 py-1 bg-white hover:bg-cyan-50 border border-slate-200 text-[#004b93] text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Quét mã vạch hoặc camera Serial"
+                      >
+                        <Camera className="w-3 h-3 text-[#00a3e0]" />
+                        <span className="hidden sm:inline">Quét S/N</span>
+                      </button>
+
+                      {/* Duplicate */}
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateItem(index)}
+                        className="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors cursor-pointer"
+                        title="Nhân bản dòng này"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Delete */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(index)}
+                        className="p-1.5 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors cursor-pointer"
+                        title="Xóa vật tư này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Duplicate warning callout if detected */}
+                  {dupInfo.isDuplicate && (
+                    <div className="p-2.5 sm:p-3 bg-amber-100/90 border border-amber-300 rounded-xl text-amber-950 text-xs flex items-start gap-2.5 shadow-2xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1 flex-1">
+                        <div className="font-bold flex flex-wrap items-center gap-1.5 text-amber-900">
+                          <span>Cảnh báo trùng lặp vật tư:</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded font-semibold">
+                            Trùng Mã VT + Tên thiết bị + Số Serial
+                          </span>
+                        </div>
+                        {dupInfo.sameLines.length > 0 && (
+                          <p className="text-[11px] text-amber-800">
+                            • Trùng với dòng <b>#{dupInfo.sameLines.join(', #')}</b> trong cùng phiếu này.
+                          </p>
+                        )}
+                        {dupInfo.otherVouchers.length > 0 && (
+                          <p className="text-[11px] text-amber-800">
+                            • Đã tồn tại trên hệ thống tại phiếu: <b>{dupInfo.otherVouchers.map((ov) => `${ov.soChungTu} (${formatDateVN(ov.ngayTiepNhan)})`).join(', ')}</b>.
+                          </p>
+                        )}
+                        <p className="text-[10px] text-amber-700 italic">
+                          Khuyến nghị: Vui lòng kiểm tra lại Số Serial hoặc Mã thiết bị để tránh nhập trùng dữ liệu.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Item Inputs Grid: Tên vật tư, Mã vật tư, Số Serial */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {/* Tên vật tư */}
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Tên vật tư <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={item.tenVT}
+                        onChange={(e) => handleUpdateItem(index, 'tenVT', e.target.value)}
+                        placeholder="VD: ONT iGate GW040-H..."
+                        className="w-full h-10 px-3 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
+                      />
+                    </div>
+
+                    {/* Mã vật tư */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1 flex items-center justify-between">
+                        <span>Mã vật tư</span>
+                        {dupInfo.isDuplicate && (
+                          <span className="text-amber-600 text-[10px] font-bold">Trùng</span>
+                        )}
+                      </label>
+                      <input
+                        type="text"
+                        value={item.maVT}
+                        onChange={(e) => handleUpdateItem(index, 'maVT', e.target.value)}
+                        placeholder="VD: ONT-GW040H"
+                        className={`w-full h-10 px-3 bg-white border rounded-xl text-xs font-mono font-bold text-[#004b93] focus:outline-none focus:ring-1 ${
+                          dupInfo.isDuplicate
+                            ? 'border-amber-400 focus:ring-amber-500 bg-amber-50/40'
+                            : 'border-slate-300 focus:ring-[#00a3e0]'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Số Serial */}
+                    <div className="sm:col-span-2 md:col-span-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                          <span>Số Serial</span>
+                          {dupInfo.isDuplicate && (
+                            <span className="text-amber-600 font-bold text-[10px] flex items-center gap-0.5">
+                              <AlertTriangle className="w-3 h-3" /> Trùng thông tin
+                            </span>
+                          )}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setScannerModalIndex(index)}
+                          className="text-[10px] text-[#00a3e0] font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Camera className="w-2.5 h-2.5" /> Quét mã vạch / camera
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={item.serialNumber}
+                        onChange={(e) => handleUpdateItem(index, 'serialNumber', e.target.value.toUpperCase())}
+                        placeholder="VD: VT24H988102A"
+                        className={`w-full h-10 px-3 bg-white border rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-1 ${
+                          dupInfo.isDuplicate
+                            ? 'border-amber-400 focus:ring-amber-500 bg-amber-50/40'
+                            : 'border-slate-300 focus:ring-[#00a3e0]'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Big + Thêm vật tư Button for touch screens */}
+            <button
+              type="button"
+              onClick={handleAddItem}
+              className="w-full min-h-[50px] py-3.5 bg-cyan-50 hover:bg-cyan-100/80 active:bg-cyan-200 border-2 border-dashed border-[#00a3e0] text-[#004b93] font-bold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+            >
+              <Plus className="w-5 h-5 text-[#00a3e0]" />
+              <span>+ Thêm vật tư mới vào phiếu</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom Actions Bar (Sticky on mobile or bottom) */}
+        <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-4 z-30">
+          <div className="flex items-center gap-2 text-xs text-slate-500 w-full sm:w-auto">
+            <Info className="w-4 h-4 text-[#00a3e0] shrink-0" />
+            <span>
+              Tổng cộng <b>{totalItems}</b> thiết bị gắn với số chứng từ <b>{soChungTu}</b>
+              {duplicateItemsCount > 0 && (
+                <span className="text-amber-600 font-bold ml-1">
+                  ({duplicateItemsCount} trùng lặp)
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {initialData && onDelete && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="flex-1 sm:flex-none min-h-[46px] px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs sm:text-sm font-bold cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                title="Xóa phiếu"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Xóa phiếu</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 sm:flex-none min-h-[46px] px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold cursor-pointer transition-colors"
+            >
+              Hủy bỏ
+            </button>
+
+            <button
+              type="submit"
+              className="flex-1 sm:flex-none min-h-[46px] px-6 py-2.5 rounded-xl bg-[#004b93] hover:bg-[#003870] active:bg-[#002752] text-white text-xs sm:text-sm font-bold cursor-pointer transition-colors flex items-center justify-center gap-2 shadow-md"
+            >
+              <Save className="w-4 h-4 text-cyan-300" />
+              <span>Lưu chứng từ</span>
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {/* Confirmation Modal for Deleting Voucher */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 sm:p-6 border border-slate-200 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-800">Xác nhận xóa phiếu</h3>
+                <p className="text-xs text-slate-500">Thao tác này không thể hoàn tác</p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-600">
+              Bạn có chắc chắn muốn xóa vĩnh viễn phiếu{' '}
+              <span className="font-mono font-bold text-[#004b93]">
+                {soChungTu || initialData?.soChungTu || 'này'}
+              </span>{' '}
+              cùng toàn bộ <b>{danhSachVatTu.length}</b> thiết bị vật tư liên quan không?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs sm:text-sm font-bold hover:bg-slate-100 cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (initialData && onDelete) {
+                    onDelete(initialData.id);
+                  }
+                  setShowDeleteConfirm(false);
+                  onCancel();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm font-bold cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Xác nhận xóa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Equipment Catalog Picker Modal */}
+      {catalogModalIndex !== null && (
+        <EquipmentCatalogModal
+          isOpen={true}
+          onClose={() => setCatalogModalIndex(null)}
+          onSelect={(selected) => {
+            handleUpdateItem(catalogModalIndex, 'maVT', selected.maVT);
+            handleUpdateItem(catalogModalIndex, 'tenVT', selected.tenVT);
+            setCatalogModalIndex(null);
+          }}
+        />
+      )}
+
+      {/* Barcode & S/N Scanner Modal */}
+      {scannerModalIndex !== null && (
+        <BarcodeScannerModal
+          isOpen={true}
+          itemTitle={danhSachVatTu[scannerModalIndex]?.tenVT || 'Thiết bị'}
+          onClose={() => setScannerModalIndex(null)}
+          onScanSuccess={(serial) => {
+            handleUpdateItem(scannerModalIndex, 'serialNumber', serial);
+            setScannerModalIndex(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};
