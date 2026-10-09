@@ -25,14 +25,6 @@ export const DON_VI_GOI_Y = [
   'Phân xưởng Đo kiểm & Sửa chữa Thiết bị số 3',
 ];
 
-export const CAN_BO_GOI_Y = [
-  'Nguyễn Văn Hùng',
-  'Trần Anh Tuấn',
-  'Lê Hoàng Nam',
-  'Phạm Minh Đức',
-  'Vũ Thị Bích Ngọc',
-];
-
 export const TRANG_THAI_HIEN_TAI_OPTIONS = [
   'Tiếp nhận mới',
   'NK tốt',

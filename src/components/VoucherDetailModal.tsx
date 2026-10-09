@@ -9,7 +9,8 @@ import {
   Layers, 
   CheckCircle, 
   Wrench, 
-  Save 
+  Save,
+  FileText
 } from 'lucide-react';
 import { PhieuGiaoDich, ChiTietVatTu, TrangThaiSauSua } from '../types';
 import { 
@@ -131,8 +132,8 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
 
         {/* Header - Not printed */}
         <div className="bg-[#004b93] text-white px-4 py-3 flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-mono text-xs font-bold bg-[#00a3e0] text-white px-2 py-0.5 rounded shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="font-mono text-sm sm:text-base md:text-lg font-black bg-[#00a3e0] text-white px-3 py-1 rounded-lg shrink-0 shadow-xs tracking-wider">
               {voucher.soChungTu}
             </span>
             <h3 className="font-bold text-sm sm:text-base truncate">
@@ -200,6 +201,20 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
               ======================================================== */}
           {isUpdatingStatus ? (
             <div className="space-y-4">
+              {/* Prominent Voucher Code in Status Update */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-xs">
+                <div>
+                  <span className="text-slate-500 text-xs font-semibold block">Số phiếu tiếp nhận:</span>
+                  <div className="text-lg sm:text-xl font-mono font-black text-[#004b93] tracking-wider mt-0.5">
+                    {voucher.soChungTu}
+                  </div>
+                </div>
+                <div className="sm:text-right">
+                  <span className="text-slate-500 text-xs font-semibold block">Tổng thiết bị:</span>
+                  <div className="text-sm font-bold text-slate-800">{items.length} thiết bị</div>
+                </div>
+              </div>
+
               {/* Detail Items Status Update List */}
               <div className="space-y-3">
                 <h4 className="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
@@ -340,52 +355,68 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                   <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold border ${typeBadge.bg} ${typeBadge.border}`}>
                     {typeBadge.label}
                   </span>
-                  <p className="text-xs font-mono font-bold text-[#004b93] mt-1">
-                    Số: {voucher.soChungTu}
+                  <p className="text-sm sm:text-base md:text-lg font-mono font-black text-[#004b93] mt-1 tracking-wide">
+                    Số phiếu: <span className="underline decoration-[#00a3e0] underline-offset-2">{voucher.soChungTu}</span>
                   </p>
                 </div>
               </div>
 
               {/* Title */}
-              <div className="text-center my-2">
-                <h2 className="text-lg sm:text-xl font-extrabold uppercase text-[#004b93] tracking-wide">
+              <div className="text-center my-3">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-black uppercase text-[#004b93] tracking-wide">
                   {voucher.loaiChungTu === 'PXK' && 'BIÊN BẢN XUẤT KHO THIẾT BỊ SỬA CHỮA'}
                   {voucher.loaiChungTu === 'PNK' && 'BIÊN BẢN NHẬP KHO THIẾT BỊ THU HỒI'}
                   {voucher.loaiChungTu === 'GUI_MUON' && 'BIÊN BẢN BÀN GIAO GỬI / MƯỢN THIẾT BỊ'}
                 </h2>
-                <p className="text-xs text-slate-500 mt-1 italic">
-                  Ngày tiếp nhận / lập phiếu: {formatDateVN(voucher.ngayTiepNhan)}
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+                  <span className="text-xs text-slate-500 italic">
+                    Ngày tiếp nhận / lập phiếu: {formatDateVN(voucher.ngayTiepNhan)}
+                  </span>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <span className="text-sm sm:text-base font-mono font-black text-[#004b93] bg-cyan-50 px-2.5 py-0.5 rounded-lg border border-cyan-200">
+                    Số phiếu: {voucher.soChungTu}
+                  </span>
+                </div>
               </div>
 
               {/* Master Info Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-[#004b93] shrink-0" />
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Cán bộ tiếp nhận:</span>
-                    <span className="font-semibold text-slate-800">{voucher.canBoTiepNhan}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+                  <FileText className="w-5 h-5 text-[#004b93] shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Số phiếu:</span>
+                    <span className="font-mono text-sm sm:text-base font-black text-[#004b93] truncate block tracking-wide">
+                      {voucher.soChungTu}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-[#004b93] shrink-0" />
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Ngày ghi nhận:</span>
-                    <span className="font-semibold text-slate-800">{formatDateVN(voucher.ngayTiepNhan)}</span>
+                <div className="flex items-center gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+                  <User className="w-5 h-5 text-[#004b93] shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Cán bộ tiếp nhận:</span>
+                    <span className="font-semibold text-slate-800 truncate block">{voucher.canBoTiepNhan}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Hash className="w-4 h-4 text-[#004b93] shrink-0" />
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Số lượng thiết bị:</span>
-                    <span className="font-bold text-[#004b93]">{voucher.danhSachVatTu.length} thiết bị</span>
+                <div className="flex items-center gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+                  <Calendar className="w-5 h-5 text-[#004b93] shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Ngày ghi nhận:</span>
+                    <span className="font-semibold text-slate-800 truncate block">{formatDateVN(voucher.ngayTiepNhan)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs">
+                  <Hash className="w-5 h-5 text-[#004b93] shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Số lượng thiết bị:</span>
+                    <span className="font-bold text-[#004b93] truncate block">{voucher.danhSachVatTu.length} thiết bị</span>
                   </div>
                 </div>
 
                 {voucher.ghiChu && (
-                  <div className="sm:col-span-3 pt-2 border-t border-slate-200 mt-1">
+                  <div className="sm:col-span-2 lg:col-span-4 pt-2 border-t border-slate-200 mt-1">
                     <span className="text-slate-400 block text-[10px]">Ghi chú:</span>
                     <p className="text-slate-700 italic">{voucher.ghiChu}</p>
                   </div>
@@ -521,8 +552,14 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 print:hidden">
-          <span>Tạo lúc: {new Date(voucher.createdAt).toLocaleString('vi-VN')}</span>
+        <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-2 text-xs text-slate-500 print:hidden">
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-black text-sm text-[#004b93] bg-white px-2 py-0.5 rounded border border-slate-200">
+              Số phiếu: {voucher.soChungTu}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span>Tạo lúc: {new Date(voucher.createdAt).toLocaleString('vi-VN')}</span>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}

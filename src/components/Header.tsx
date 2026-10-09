@@ -6,7 +6,6 @@ import {
   BarChart3, 
   Layers, 
   FileSpreadsheet, 
-  RotateCcw,
   Sparkles,
   Cloud
 } from 'lucide-react';
@@ -17,7 +16,7 @@ interface HeaderProps {
   onNewVoucher: () => void;
   onOpenSmartScan: () => void;
   onExportCSV: () => void;
-  onResetData: () => void;
+  onResetData?: () => void;
   totalCount: number;
 }
 
@@ -27,7 +26,6 @@ export const Header: React.FC<HeaderProps> = ({
   onNewVoucher,
   onOpenSmartScan,
   onExportCSV,
-  onResetData,
   totalCount,
 }) => {
   return (
@@ -82,16 +80,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
             <span>Xuất CSV</span>
-          </button>
-
-          {/* Reset / Clear Data */}
-          <button
-            onClick={onResetData}
-            className="hidden lg:flex items-center gap-1 bg-[#003870] hover:bg-[#002752] text-slate-200 text-xs px-2.5 py-2 rounded-lg transition-colors cursor-pointer border border-white/10"
-            title="Xóa trắng danh sách phiếu"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-cyan-200" />
-            <span>Xóa trắng</span>
           </button>
         </div>
       </div>

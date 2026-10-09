@@ -34,7 +34,6 @@ import {
 } from '../utils/formatters';
 import { 
   DON_VI_GOI_Y, 
-  CAN_BO_GOI_Y, 
   TRANG_THAI_HIEN_TAI_OPTIONS 
 } from '../constants/sampleData';
 import { loadVouchers } from '../utils/storage';
@@ -97,7 +96,6 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   // Modals state
   const [catalogModalIndex, setCatalogModalIndex] = useState<number | null>(null);
   const [scannerModalIndex, setScannerModalIndex] = useState<number | null>(null);
-  const [showCanBoSuggestions, setShowCanBoSuggestions] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
@@ -429,48 +427,21 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
             </div>
 
             {/* Cán bộ tiếp nhận */}
-            <div className="relative">
+            <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                   <User className="w-3.5 h-3.5 text-[#004b93]" />
                   <span>Cán bộ tiếp nhận</span>
                   <span className="text-rose-500">*</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowCanBoSuggestions(!showCanBoSuggestions)}
-                  className="text-[11px] text-[#00a3e0] font-medium hover:underline cursor-pointer"
-                >
-                  Gợi ý cán bộ
-                </button>
               </div>
               <input
                 type="text"
                 value={canBoTiepNhan}
                 onChange={(e) => setCanBoTiepNhan(e.target.value)}
-                placeholder="VD: Nguyễn Văn Hùng"
+                placeholder="Nhập họ tên cán bộ tiếp nhận"
                 className="w-full h-11 px-3.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00a3e0]"
               />
-
-              {/* Suggestions Popup */}
-              {showCanBoSuggestions && (
-                <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-300 rounded-xl shadow-lg p-2 space-y-1">
-                  <p className="text-[10px] text-slate-400 font-semibold px-2 py-0.5">Chọn nhanh cán bộ:</p>
-                  {CAN_BO_GOI_Y.map((cb, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setCanBoTiepNhan(cb);
-                        setShowCanBoSuggestions(false);
-                      }}
-                      className="w-full text-left text-xs p-2 rounded-lg hover:bg-slate-100 text-slate-700 truncate cursor-pointer font-medium"
-                    >
-                      {cb}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Ghi chú chung chứng từ - Thiết kế gọn gàng, thuận tiện thao tác trên điện thoại */}
