@@ -44,52 +44,56 @@ export const SAMPLE_INITIAL_DATA: PhieuGiaoDich[] = [];
 
 export const OCR_SAMPLE_PRESETS = [
   {
-    name: 'Mẫu 1: Phiếu xuất kho ONT & Wifi Mesh (Ảnh chụp/Text biên bản)',
-    type: 'PXK',
-    text: `HỆ THỐNG QUẢN LÝ VẬT TƯ THIẾT BỊ QLVT-TB
-TRUNG TÂM ĐIỀU HÀNH THÔNG TIN - PHÂN XƯỞNG THIẾT BỊ
-PHIẾU XUẤT KHO THIẾT BỊ SỬA CHỮA
-Số chứng từ: PXK-20261009-088
-Ngày lập/tiếp nhận: 09/10/2026
-Đơn vị giao/nhận: Trung tâm Viễn thông 2
-Cán bộ phụ trách: Nguyễn Văn Hùng
-Ghi chú: Xuất kho trả thiết bị đã xử lý xong sau bảo dưỡng định kỳ quý 3.
-
-DANH MỤC THIẾT BỊ VẬT TƯ:
-1. ONT iGate GW040-H Băng tần kép | S/N: VT24H-882910 | Trạng thái: Tốt | Số PNK hoàn tất: PNK-20261007-12 | Trạng thái hiện tại: Đã xuất đi
-2. Bộ phát Wifi Mesh iGate EW12SX | S/N: MESH12S-772819 | Trạng thái: Tốt | Số PNK hoàn tất: PNK-20261007-12 | Trạng thái hiện tại: Đã xuất đi
-3. ONT GPON iGate GW020 | S/N: VT20G-993812 | Trạng thái: Hỏng | Số PNK hoàn tất:  | Trạng thái hiện tại: Đang sửa chữa
-4. Adapter 12V-1.5A iGate | S/N: ADP-VT-4421 | Trạng thái: Tốt | Số PNK hoàn tất: PNK-20261007-12 | Trạng thái hiện tại: Đã xuất đi`,
-  },
-  {
-    name: 'Mẫu 2: Biên bản tiếp nhận thu hồi thiết bị hỏng (PNK)',
+    name: 'Mẫu 1: Phiếu nhập kho (PNK chuẩn: 9325/N/26/KTTC-C1-KH04)',
     type: 'PNK',
-    text: `TRUNG TÂM MẠNG LƯỚI NGOẠI VI
-BIÊN BẢN BÀN GIAO TIẾP NHẬN THIẾT BỊ SỬA CHỮA
-Số phiếu: PNK-20261009-105
-Ngày tiếp nhận: 2026-10-09
-Đơn vị giao: Đội Điều hành Ngoại vi số 4
-Người tiếp nhận: Trần Anh Tuấn
-Nội dung: Tiếp nhận vật tư hỏng do sét đánh lan truyền tuyến cáp nhánh 5.
+    text: `TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM
+TRUNG TÂM KỸ THUẬT & DỊCH VỤ VIỄN THÔNG
+PHIẾU NHẬP KHO VẬT TƯ THIẾT BỊ
+Số: 9325/N/26/KTTC-C1-KH04
+Ngày 09 tháng 10 năm 2026
+Vị trí kho: KTTC-C1 | Phân đoạn kho: KH04
+Đơn vị giao: Đội Điều hành Viễn thông Khu vực 1
+Cán bộ kỹ thuật tiếp nhận: Nguyễn Văn Hùng
+Lý do nhập kho: Nhập thu hồi thiết bị sau sửa chữa & kiểm thử định kỳ
 
-Chi tiết vật tư:
-- Mã VT: ONT-GW040H - Tên: ONT iGate GW040-H - S/N: SN-GW040-332901 - Kết quả: Lỗi - Tình trạng: Đang sửa chữa
-- Mã VT: MESH-EW12SX - Tên: Bộ phát Wifi Mesh EW12SX - S/N: SN-EW12-554109 - Kết quả: Tốt - PNK hoàn tất: PNK-20261009-105 - Tình trạng: Đã nhập kho
-- Mã VT: SW-CISCO-2960 - Tên: Switch Cisco Catalyst 2960 - S/N: FCW2138L0AA - Kết quả: Lỗi - Tình trạng: Đang sửa chữa`,
+BẢNG KÊ THIẾT BỊ VẬT TƯ NHẬP KHO:
+1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | S/N: VNPT26H932501 | Trạng thái kỹ thuật: Tốt | Trạng thái hiện tại: NK tốt
+2. Bộ phát Wifi Mesh iGate EW12SX | Mã VT: MESH-EW12SX | S/N: MESH26E932502 | Trạng thái kỹ thuật: Tốt | Trạng thái hiện tại: NK tốt
+3. ONT GPON iGate GW020 2 Cổng | Mã VT: ONT-GW020 | S/N: GW020VN26932503 | Trạng thái kỹ thuật: Hỏng | Trạng thái hiện tại: NK hỏng
+4. Switch Cisco Catalyst 2960-24TC-L | Mã VT: SW-CISCO-2960 | S/N: FCW2618L932504 | Trạng thái kỹ thuật: Lỗi | Trạng thái hiện tại: Kiểm tra thêm`,
   },
   {
-    name: 'Mẫu 3: Phiếu Gửi/Mượn máy móc thi công cáp quang',
-    type: 'GUI_MUON',
-    text: `ĐỘI ỨNG CỨU SỰ CỐ
-GIẤY ĐỀ NGHỊ GỬI MƯỢN THIẾT BỊ THI CÔNG
-Số hiệu: GM-20261009-019
-Ngày mượn: 09/10/2026
-Bên mượn: Phân xưởng Đo kiểm & Sửa chữa Thiết bị số 3
-Cán bộ nhận bàn giao: Phạm Minh Đức
-Ghi chú: Mượn phục vụ thi công tuyến cáp trục liên xã khẩn cấp.
+    name: 'Mẫu 2: Phiếu xuất kho (PXK chuẩn: 14853/X/26/KTTC-C1-KH01)',
+    type: 'PXK',
+    text: `TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM
+TRUNG TÂM KỸ THUẬT & DỊCH VỤ VIỄN THÔNG
+PHIẾU XUẤT KHO THIẾT BỊ ĐIỀU PHỐI
+Số: 14853/X/26/KTTC-C1-KH01
+Ngày 10 tháng 10 năm 2026
+Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
+Đơn vị nhận: Trung tâm Viễn thông Địa bàn 2
+Người nhận bàn giao: Trần Anh Tuấn
+Ghi chú: Xuất điều phối vật tư thiết bị mạng cho tổ ứng cứu khẩn cấp
 
-Danh sách:
-1. COMWAY-C6 | Máy hàn cáp quang Comway C6 kèm pin | Serial: CMW6-778899 | Trạng thái: Tốt | Số PNK: PNK-GM-99 | Trạng thái hiện tại: Đã xuất đi
-2. FC-6S-CLEAVER | Dao cắt sợi quang Sumitomo FC-6S | Serial: SMT-FC6S-1122 | Trạng thái: Tốt | Số PNK: PNK-GM-99 | Trạng thái hiện tại: Đã xuất đi`,
+BẢNG KÊ DANH MỤC THIẾT BỊ XUẤT KHO:
+1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | S/N: VNPT26X148531 | Tình trạng: Tốt | Trạng thái hiện tại: Đã xuất đi
+2. Bộ phát Wifi Mesh iGate EW12SX AC1200 | S/N: MESH26X148532 | Tình trạng: Tốt | Trạng thái hiện tại: Đã xuất đi
+3. Adapter nguồn 12V - 1.5A chính hãng iGate | S/N: ADP26X148533 | Tình trạng: Tốt | Trạng thái hiện tại: Đã xuất đi`,
+  },
+  {
+    name: 'Mẫu 3: Biên bản bàn giao thiết bị đo kiểm & hàn nối quang',
+    type: 'GUI_MUON',
+    text: `ĐỘI ỨNG CỨU SỰ CỐ & BẢO TRÌ TUYẾN QUANG
+BIÊN BẢN BÀN GIAO GỬI MƯỢN THIẾT BỊ
+Số: 1042/BBBG/26/KTTC-C1
+Ngày lập: 09/10/2026
+Kho xuất: KTTC-C1
+Bên nhận: Phân xưởng Đo kiểm & Sửa chữa Thiết bị số 3
+Cán bộ kỹ thuật phụ trách: Phạm Minh Đức
+Nội dung: Mượn máy hàn quang và dao cắt phục vụ xử lý sự cố đứt cáp
+
+DANH SÁCH THIẾT BỊ BÀN GIAO:
+1. Máy hàn cáp quang Comway C6 kèm pin | S/N: CMW6-2610421 | Trạng thái: Tốt | Trạng thái hiện tại: Đã xuất đi
+2. Dao cắt sợi quang chính xác Sumitomo FC-6S | S/N: FC6S-2610422 | Trạng thái: Tốt | Trạng thái hiện tại: Đã xuất đi`,
   },
 ];

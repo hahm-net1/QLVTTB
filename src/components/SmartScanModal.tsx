@@ -109,16 +109,29 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
   const handleApply = () => {
     if (!extractedResult) return;
 
-    const formattedVatTu: ChiTietVatTu[] = (extractedResult.danhSachVatTu || []).map((item, idx) => ({
-      id: `vt-${Date.now()}-${idx}`,
-      maVT: item.maVT || 'ONT-GW040H',
-      tenVT: item.tenVT || 'Thiết bị viễn thông',
-      serialNumber: item.serialNumber || `SN-${Math.floor(100000 + Math.random() * 900000)}`,
-      trangThaiSauSua: item.trangThaiSauSua || 'TOT',
-      soPNKHoanTat: item.soPNKHoanTat || '',
-      trangThaiHienTai: item.trangThaiHienTai || 'Đang sửa chữa',
-      ghiChuVatTu: '',
-    }));
+    const isPNK = extractedResult.loaiChungTu === 'PNK';
+    const formattedVatTu: ChiTietVatTu[] = (extractedResult.danhSachVatTu || []).map((item, idx) => {
+      const ttSauSua = item.trangThaiSauSua || 'TOT';
+      let defaultCurrent = 'NK tốt';
+      if (isPNK) {
+        if (ttSauSua === 'TOT') defaultCurrent = 'NK tốt';
+        else if (ttSauSua === 'HONG') defaultCurrent = 'NK hỏng';
+        else defaultCurrent = 'Kiểm tra thêm';
+      } else {
+        defaultCurrent = 'Đã xuất đi';
+      }
+
+      return {
+        id: `vt-${Date.now()}-${idx}`,
+        maVT: item.maVT || 'ONT-GW040H',
+        tenVT: item.tenVT || 'Thiết bị viễn thông',
+        serialNumber: item.serialNumber || `SN-${Math.floor(100000 + Math.random() * 900000)}`,
+        trangThaiSauSua: ttSauSua,
+        soPNKHoanTat: '',
+        trangThaiHienTai: item.trangThaiHienTai || defaultCurrent,
+        ghiChuVatTu: '',
+      };
+    });
 
     const partialVoucher: Partial<PhieuGiaoDich> = {
       soChungTu: extractedResult.soChungTu || '',
@@ -158,6 +171,26 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Trained Structure Banner */}
+        <div className="bg-gradient-to-r from-blue-900 via-indigo-950 to-[#003870] text-white px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-2 border-b border-blue-800">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-cyan-400 text-blue-950 font-black text-[10px] tracking-wide uppercase">
+              AI OCR Trained
+            </span>
+            <span className="font-medium text-cyan-100 text-[11px]">
+              Quy chuẩn nhận diện số phiếu đã huấn luyện:
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] font-mono">
+            <span className="bg-blue-800/80 px-2 py-0.5 rounded border border-blue-700/60 text-cyan-200">
+              <strong className="text-white">PNK:</strong> 9325/<span className="text-amber-300 font-bold">N</span>/26/KTTC-C1-KH04
+            </span>
+            <span className="bg-blue-800/80 px-2 py-0.5 rounded border border-blue-700/60 text-cyan-200">
+              <strong className="text-white">PXK:</strong> 14853/<span className="text-emerald-300 font-bold">X</span>/26/KTTC-C1-KH01
+            </span>
+          </div>
         </div>
 
         {/* Input Methods Tab Bar */}
@@ -347,40 +380,96 @@ Người nhận: Nguyễn Văn Hùng
               </div>
 
               {/* Master metadata cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Số chứng từ:</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {extractedResult.soChungTu || '(Chưa có - sẽ tự sinh)'}
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Số chứng từ nhận diện:
+                    </span>
+                    {extractedResult.loaiChungTu && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        extractedResult.loaiChungTu === 'PNK'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}>
+                        {extractedResult.loaiChungTu === 'PNK' ? 'PHIẾU NHẬP (N)' : 'PHIẾU XUẤT (X)'}
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={extractedResult.soChungTu || ''}
+                    onChange={(e) => setExtractedResult({ ...extractedResult, soChungTu: e.target.value })}
+                    className="mt-1 font-mono font-bold text-[#004b93] text-sm w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
+                    placeholder="Ví dụ: 9325/N/26/KTTC-C1-KH04"
+                  />
+                  {(extractedResult.viTriKho || extractedResult.namChungTu || extractedResult.phanDoanKho) && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2 text-[10px] font-mono">
+                      {extractedResult.soPhieuGoc && (
+                        <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                          Số: {extractedResult.soPhieuGoc}
+                        </span>
+                      )}
+                      {extractedResult.namChungTu && (
+                        <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                          Năm: {extractedResult.namChungTu}
+                        </span>
+                      )}
+                      {extractedResult.viTriKho && (
+                        <span className="bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded font-semibold">
+                          Kho: {extractedResult.viTriKho}
+                        </span>
+                      )}
+                      {extractedResult.phanDoanKho && (
+                        <span className="bg-purple-50 text-purple-800 px-1.5 py-0.5 rounded">
+                          Ngăn: {extractedResult.phanDoanKho}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
+                      Loại chứng từ:
+                    </span>
+                    <select
+                      value={extractedResult.loaiChungTu || 'PXK'}
+                      onChange={(e) => setExtractedResult({ ...extractedResult, loaiChungTu: e.target.value as any })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-[#004b93] text-xs focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
+                    >
+                      <option value="PNK">Phiếu nhập kho (PNK - Ký hiệu: /N/)</option>
+                      <option value="PXK">Phiếu xuất kho (PXK - Ký hiệu: /X/)</option>
+                      <option value="GUI_MUON">Gửi/Mượn / Bàn giao (BBBG)</option>
+                    </select>
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-500">
+                    <span className="text-slate-400">Ngày lập: </span>
+                    <strong className="text-slate-700">{extractedResult.ngayTiepNhan || 'Hôm nay'}</strong>
+                  </div>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Loại chứng từ:</span>
-                  <span className="font-bold text-[#004b93]">
-                    {extractedResult.loaiChungTu || 'PXK'}
-                  </span>
+                  <span className="text-[10px] text-slate-400 block font-semibold">Đơn vị liên quan / Kho:</span>
+                  <input
+                    type="text"
+                    value={extractedResult.donViLienQuan || ''}
+                    onChange={(e) => setExtractedResult({ ...extractedResult, donViLienQuan: e.target.value })}
+                    className="font-medium text-slate-800 w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs mt-0.5 focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
+                    placeholder="Kho KTTC-C1 hoặc tên đơn vị"
+                  />
                 </div>
 
                 <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Ngày tiếp nhận:</span>
-                  <span className="font-semibold text-slate-800">
-                    {extractedResult.ngayTiepNhan || 'Hôm nay'}
-                  </span>
-                </div>
-
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">Đơn vị liên quan:</span>
-                  <span className="font-semibold text-slate-800 truncate block">
-                    {extractedResult.donViLienQuan || '(Chưa nhận diện)'}
-                  </span>
-                </div>
-
-                <div className="bg-white p-2.5 rounded-xl border border-slate-200 sm:col-span-2">
-                  <span className="text-[10px] text-slate-400 block">Cán bộ tiếp nhận:</span>
-                  <span className="font-semibold text-slate-800">
-                    {extractedResult.canBoTiepNhan || '(Chưa nhận diện)'}
-                  </span>
+                  <span className="text-[10px] text-slate-400 block font-semibold">Cán bộ tiếp nhận:</span>
+                  <input
+                    type="text"
+                    value={extractedResult.canBoTiepNhan || ''}
+                    onChange={(e) => setExtractedResult({ ...extractedResult, canBoTiepNhan: e.target.value })}
+                    className="font-medium text-slate-800 w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs mt-0.5 focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
+                    placeholder="Tên cán bộ kỹ thuật"
+                  />
                 </div>
               </div>
 

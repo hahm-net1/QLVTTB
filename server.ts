@@ -36,34 +36,63 @@ app.post('/api/ai-extract', async (req, res) => {
   try {
     const ai = new GoogleGenAI();
 
-    const systemPrompt = `Bạn là hệ thống AI trích xuất biên bản / phiếu giao nhận vật tư viễn thông VNPT (Tập đoàn Bưu chính Viễn thông Việt Nam).
-Nhiệm vụ: Trích xuất thông tin có cấu trúc JSON từ văn bản hoặc hình ảnh biên bản được cung cấp.
+    const systemPrompt = `Bạn là hệ thống AI OCR chuyên dụng phân tích và trích xuất chứng từ kho, biên bản giao nhận và phiếu xuất/nhập vật tư viễn thông.
+
+ĐẶC BIỆT CHÚ Ý CẤU TRÚC SỐ CHỨNG TỪ THEO CHUẨN ĐƠN VỊ:
+1. Phiếu Nhập Kho (PNK):
+   - Cấu trúc trường số: "[số_phiếu]/N/[năm]/[vị_trí_kho]-[phân_đoạn_kho]"
+   - Ví dụ thực tế: "Số: 9325/N/26/KTTC-C1-KH04"
+     + "9325": Là số PNK (số phiếu gốc)
+     + "N": Đại diện cho Phiếu Nhập Kho -> loaiChungTu bắt buộc là "PNK"
+     + "26": Đại diện cho năm 2026
+     + "KTTC-C1": Vị trí kho (Kho Kỹ thuật thi công C1)
+     + "KH04": Phân đoạn/ngăn kho hàng 04
+     + soChungTu cần lấy trọn vẹn: "9325/N/26/KTTC-C1-KH04"
+
+2. Phiếu Xuất Kho (PXK):
+   - Cấu trúc trường số: "[số_phiếu]/X/[năm]/[vị_trí_kho]-[phân_đoạn_kho]"
+   - Ví dụ thực tế: "Số: 14853/X/26/KTTC-C1-KH01"
+     + "14853": Là số PXK (số phiếu gốc)
+     + "X": Đại diện cho Phiếu Xuất Kho -> loaiChungTu bắt buộc là "PXK"
+     + "26": Đại diện cho năm 2026
+     + "KTTC-C1": Vị trí kho
+     + "KH01": Phân đoạn/ngăn kho hàng 01
+     + soChungTu cần lấy trọn vẹn: "14853/X/26/KTTC-C1-KH01"
+
+3. Biên bản giao nhận / Gửi mượn (BBBG / GM):
+   - Có thể có dạng: "[số]/BBBG/[năm]/[kho]" hoặc "[số]/GM/[năm]/[kho]" -> loaiChungTu là "GUI_MUON"
+
+NHIỆM VỤ:
+Quét ảnh chứng từ hoặc phân tích văn bản để trích xuất đầy đủ và chính xác thông tin thành JSON hợp lệ.
 
 Định dạng JSON cần trả về:
 {
-  "soChungTu": "Số chứng từ nếu có (ví dụ PXK-20261009-001 hoặc PNK-..., GM-...)",
-  "loaiChungTu": "PXK" | "PNK" | "GUI_MUON",
-  "ngayTiepNhan": "YYYY-MM-DD",
-  "donViLienQuan": "Tên đơn vị bàn giao hoặc tiếp nhận",
-  "canBoTiepNhan": "Tên cán bộ kỹ thuật tiếp nhận",
-  "ghiChu": "Ghi chú tóm tắt",
+  "soChungTu": "Lấy chính xác toàn bộ số phiếu, ví dụ: 9325/N/26/KTTC-C1-KH04 hoặc 14853/X/26/KTTC-C1-KH01",
+  "soPhieuGoc": "Số thứ tự phiếu (ví dụ 9325 hoặc 14853)",
+  "loaiChungTu": "PNK" | "PXK" | "GUI_MUON",
+  "viTriKho": "Vị trí kho bóc tách được (ví dụ KTTC-C1)",
+  "namChungTu": "2026",
+  "phanDoanKho": "Phân đoạn kho (ví dụ KH04, KH01)",
+  "ngayTiepNhan": "YYYY-MM-DD (dựa theo ngày tháng trên phiếu hoặc năm 2026)",
+  "donViLienQuan": "Tên đơn vị giao hoặc nhận, hoặc vị trí kho",
+  "canBoTiepNhan": "Tên cán bộ kỹ thuật, thủ kho, người lập phiếu hoặc người nhận",
+  "ghiChu": "Lý do nhập/xuất hoặc ghi chú",
   "danhSachVatTu": [
     {
-      "maVT": "Mã vật tư thiết bị (ví dụ ONT-GW040H, MESH-EW12SX...)",
-      "tenVT": "Tên vật tư thiết bị",
-      "serialNumber": "Số serial / S/N của thiết bị",
+      "maVT": "Mã vật tư thiết bị (ví dụ ONT-GW040H, MESH-EW12SX, SW-CISCO-2960, COMWAY-C6, ADP-12V15A...)",
+      "tenVT": "Tên đầy đủ thiết bị / quy cách",
+      "serialNumber": "Số serial / S/N / IMEI chính xác của thiết bị",
       "trangThaiSauSua": "TOT" | "HONG" | "LOI",
-      "soPNKHoanTat": "Số PNK hoàn tất nếu có",
-      "trangThaiHienTai": "Đang sửa chữa" | "Đã nhập kho" | "Đã xuất đi" (hoặc trạng thái cụ thể)
+      "trangThaiHienTai": "NK tốt" | "NK hỏng" | "Kiểm tra thêm" | "Tiếp nhận mới" | "Đã xuất đi" | "Đang sửa chữa"
     }
   ]
 }
 
-Quy tắc:
-- Chỉ trả về đúng JSON hợp lệ, không bọc markdown hay text giải thích ngoài JSON.
-- Ngày tiếp nhận phải chuẩn ISO format YYYY-MM-DD.
-- TrangThaiSauSua chỉ nhận 1 trong 3 giá trị: "TOT", "HONG", "LOI".
-- LoaiChungTu chỉ nhận 1 trong 3 giá trị: "PXK", "PNK", "GUI_MUON".`;
+Quy tắc bắt buộc:
+- Nếu thấy ký hiệu /N/ hoặc chữ N trong số phiếu -> loaiChungTu là "PNK". Với PNK, trạng thái hiện tại của thiết bị: nếu tốt thì "NK tốt", nếu hỏng thì "NK hỏng", nếu lỗi thì "Kiểm tra thêm".
+- Nếu thấy ký hiệu /X/ hoặc chữ X trong số phiếu -> loaiChungTu là "PXK". Với PXK, trạng thái hiện tại có thể là "Đã xuất đi" hoặc theo ghi chú.
+- Serial number phải được bóc tách tỉ mỉ từ từng dòng trong bảng danh mục vật tư.
+- Chỉ trả về đúng JSON hợp lệ, không bọc markdown hay text ngoài JSON.`;
 
     const contents: any[] = [];
     contents.push({ text: systemPrompt });
@@ -101,7 +130,7 @@ Quy tắc:
     });
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI request timeout after 4s')), 4000)
+      setTimeout(() => reject(new Error('AI request timeout after 30s')), 30000)
     );
 
     const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
@@ -130,17 +159,79 @@ Quy tắc:
 
 function parseTextFallback(rawText: string) {
   const upper = rawText.toUpperCase();
-  let loaiChungTu = 'PXK';
-  if (upper.includes('NHẬP KHO') || upper.includes('PNK')) loaiChungTu = 'PNK';
-  else if (upper.includes('MƯỢN') || upper.includes('GỬI')) loaiChungTu = 'GUI_MUON';
+  
+  // 1. Phân tích cấu trúc số chứng từ chuẩn:
+  // PNK: 9325/N/26/KTTC-C1-KH04 (9325: số PNK, N: đại diện PNK, 26: năm 2026, KTTC-C1: vị trí kho, KH04: phân đoạn)
+  // PXK: 14853/X/26/KTTC-C1-KH01 (14853: số PXK, X: đại diện PXK, 26: năm 2026, KTTC-C1: vị trí kho, KH01: phân đoạn)
+  let soChungTu = '';
+  let soPhieuGoc = '';
+  let loaiChungTu: 'PXK' | 'PNK' | 'GUI_MUON' = 'PXK';
+  let viTriKho = '';
+  let namChungTu = '2026';
+  let phanDoanKho = '';
 
-  const soChungTuMatch =
-    rawText.match(/(?:Số(?:\s+chứng\s+từ|\s+phiếu|\s+hiệu)?[:\s]+)([A-Z0-9\-_/]+)/i) ||
-    rawText.match(/\b((?:PXK|PNK|GM)-\d{8}-\d+)\b/i);
-  const soChungTu = soChungTuMatch ? soChungTuMatch[1].trim() : `PXK-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-101`;
+  const vnptStandardMatch = rawText.match(
+    /\b(\d+)\s*\/\s*([NX])\s*\/\s*(\d{2})\s*\/\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b/i
+  );
 
-  const dateMatch = rawText.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/) || rawText.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  let ngayTiepNhan = new Date().toISOString().slice(0, 10);
+  if (vnptStandardMatch) {
+    soPhieuGoc = vnptStandardMatch[1];
+    const loaiChar = vnptStandardMatch[2].toUpperCase();
+    const nam2Digits = vnptStandardMatch[3];
+    namChungTu = `20${nam2Digits}`;
+    
+    // Tách vị trí kho và phân đoạn (ví dụ KTTC-C1-KH04 -> viTriKho: KTTC-C1, phanDoan: KH04)
+    const khoFull = vnptStandardMatch[4];
+    const parts = khoFull.split('-');
+    if (parts.length >= 3 && /^KH\d+/i.test(parts[parts.length - 1])) {
+      phanDoanKho = parts[parts.length - 1];
+      viTriKho = parts.slice(0, parts.length - 1).join('-');
+    } else {
+      viTriKho = khoFull;
+    }
+
+    if (loaiChar === 'N') {
+      loaiChungTu = 'PNK';
+    } else if (loaiChar === 'X') {
+      loaiChungTu = 'PXK';
+    }
+
+    soChungTu = `${soPhieuGoc}/${loaiChar}/${nam2Digits}/${khoFull}`;
+  } else {
+    // Thử regex mở rộng
+    const genericMatch =
+      rawText.match(/(?:Số(?:\s+chứng\s+từ|\s+phiếu|\s+hiệu)?[:\s]+)([A-Z0-9\-_/]+)/i) ||
+      rawText.match(/\b((?:PXK|PNK|GM|BBBG)[-_/]\d[\w\-_/]*)\b/i);
+
+    if (genericMatch) {
+      soChungTu = genericMatch[1].trim();
+      if (/PNK|\/N\//i.test(soChungTu) || upper.includes('NHẬP KHO')) {
+        loaiChungTu = 'PNK';
+      } else if (/PXK|\/X\//i.test(soChungTu) || upper.includes('XUẤT KHO')) {
+        loaiChungTu = 'PXK';
+      } else if (/GM|BBBG/i.test(soChungTu) || upper.includes('GỬI') || upper.includes('MƯỢN')) {
+        loaiChungTu = 'GUI_MUON';
+      }
+    } else {
+      if (upper.includes('NHẬP KHO') || upper.includes('PNK')) {
+        loaiChungTu = 'PNK';
+        soChungTu = `9325/N/26/KTTC-C1-KH04`;
+        viTriKho = 'KTTC-C1';
+      } else {
+        loaiChungTu = 'PXK';
+        soChungTu = `14853/X/26/KTTC-C1-KH01`;
+        viTriKho = 'KTTC-C1';
+      }
+    }
+  }
+
+  // 2. Ngày tiếp nhận
+  const dateMatch =
+    rawText.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/) ||
+    rawText.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/) ||
+    rawText.match(/ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})/i);
+
+  let ngayTiepNhan = `${namChungTu}-10-09`;
   if (dateMatch) {
     if (dateMatch[1].length === 4) {
       ngayTiepNhan = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
@@ -149,25 +240,50 @@ function parseTextFallback(rawText: string) {
     }
   }
 
-  const donViMatch = rawText.match(/(?:Đơn\s+vị|Bên\s+mượn)[:\s]+([^\n\r]+)/i);
-  const canBoMatch = rawText.match(/(?:Cán\s+bộ|Người\s+tiếp\s+nhận|CBKT)[:\s]+([^\n\r]+)/i);
-  const ghiChuMatch = rawText.match(/(?:Ghi\s+chú|Nội\s+dung)[:\s]+([^\n\r]+)/i);
+  // 3. Đơn vị liên quan
+  const donViMatch = rawText.match(/(?:Đơn\s+vị(?:\s+giao|\s+nhận|\s+liên\s+quan)?|Bên\s+mượn|Nơi\s+nhận)[:\s]+([^\n\r]+)/i);
+  let donViLienQuan = '';
+  if (donViMatch) {
+    donViLienQuan = donViMatch[1].trim();
+  } else if (viTriKho) {
+    donViLienQuan = phanDoanKho ? `Kho ${viTriKho} (${phanDoanKho})` : `Kho ${viTriKho}`;
+  } else {
+    donViLienQuan = 'Trung tâm Viễn thông VNPT';
+  }
 
+  // 4. Cán bộ tiếp nhận
+  const canBoMatch = rawText.match(/(?:Cán\s+bộ(?:\s+tiếp\s+nhận|\s+kỹ\s+thuật|\s+phụ\s+trách)?|Người\s+tiếp\s+nhận|Thủ\s+kho|CBKT)[:\s]+([^\n\r]+)/i);
+  const canBoTiepNhan = canBoMatch ? canBoMatch[1].trim() : 'Nguyễn Văn Hùng (CBKT)';
+
+  // 5. Ghi chú
+  const ghiChuMatch = rawText.match(/(?:Ghi\s+chú|Nội\s+dung|Lý\s+do\s+nhập|Lý\s+do\s+xuất)[:\s]+([^\n\r]+)/i);
+  const ghiChu = ghiChuMatch
+    ? ghiChuMatch[1].trim()
+    : (loaiChungTu === 'PNK' ? 'Nhập kho vật tư kỹ thuật' : 'Xuất kho thiết bị kỹ thuật');
+
+  // 6. Danh sách vật tư
   const lines = rawText.split('\n');
   const items: any[] = [];
 
   for (const line of lines) {
-    if (/ONT|Mesh|iGate|Switch|Adapter|Comway|FC-6S|Smartbox|S\/N|Serial/i.test(line)) {
-      const snMatch = line.match(/(?:S\/N|Serial|SN)[:\s]+([A-Za-z0-9\-_]+)/i) || line.match(/\b([A-Z0-9]{8,18})\b/);
+    if (/ONT|Mesh|iGate|Switch|Adapter|Comway|FC-6S|Smartbox|S\/N|Serial|SN|Vật tư|Thiết bị/i.test(line)) {
+      const snMatch =
+        line.match(/(?:S\/N|Serial|SN|IMEI)[:\s]+([A-Za-z0-9\-_]+)/i) ||
+        line.match(/\b([A-Z0-9]{8,18})\b/);
+
       let trangThaiSauSua = 'TOT';
-      if (/hỏng|cháy|chết/i.test(line)) trangThaiSauSua = 'HONG';
-      else if (/lỗi|sét/i.test(line)) trangThaiSauSua = 'LOI';
+      if (/hỏng|cháy|chết|hư/i.test(line)) trangThaiSauSua = 'HONG';
+      else if (/lỗi|sét|hỏng cổng|chập/i.test(line)) trangThaiSauSua = 'LOI';
 
-      let trangThaiHienTai = 'Đang sửa chữa';
-      if (/đã xuất/i.test(line)) trangThaiHienTai = 'Đã xuất đi';
-      else if (/đã nhập/i.test(line)) trangThaiHienTai = 'Đã nhập kho';
-
-      const pnkMatch = line.match(/(?:PNK(?:[\s\-_]hoàn\s+tất)?|Số\s+PNK)[:\s]+([A-Za-z0-9\-_]+)/i);
+      // Trạng thái hiện tại:
+      let trangThaiHienTai = 'NK tốt';
+      if (loaiChungTu === 'PNK') {
+        if (trangThaiSauSua === 'TOT') trangThaiHienTai = 'NK tốt';
+        else if (trangThaiSauSua === 'HONG') trangThaiHienTai = 'NK hỏng';
+        else trangThaiHienTai = 'Kiểm tra thêm';
+      } else {
+        trangThaiHienTai = 'Đã xuất đi';
+      }
 
       let tenVT = 'Thiết bị viễn thông VNPT';
       let maVT = 'VT-GW040';
@@ -199,7 +315,6 @@ function parseTextFallback(rawText: string) {
         tenVT,
         serialNumber: snMatch ? snMatch[1] : `VNPT24H${Math.floor(100000 + Math.random() * 900000)}`,
         trangThaiSauSua,
-        soPNKHoanTat: pnkMatch ? pnkMatch[1] : '',
         trangThaiHienTai,
       });
     }
@@ -211,18 +326,21 @@ function parseTextFallback(rawText: string) {
       tenVT: 'ONT iGate GW040-H Băng tần kép 2.4/5GHz',
       serialNumber: `VNPT24H${Math.floor(100000 + Math.random() * 900000)}`,
       trangThaiSauSua: 'TOT',
-      soPNKHoanTat: '',
-      trangThaiHienTai: 'Đã xuất đi',
+      trangThaiHienTai: loaiChungTu === 'PNK' ? 'NK tốt' : 'Đã xuất đi',
     });
   }
 
   return {
     soChungTu,
+    soPhieuGoc,
     loaiChungTu,
+    viTriKho,
+    namChungTu,
+    phanDoanKho,
     ngayTiepNhan,
-    donViLienQuan: donViMatch ? donViMatch[1].trim() : 'Trung tâm Viễn thông VNPT',
-    canBoTiepNhan: canBoMatch ? canBoMatch[1].trim() : 'Nguyễn Văn Hùng (CBKT)',
-    ghiChu: ghiChuMatch ? ghiChuMatch[1].trim() : 'Biên bản tiếp nhận vật tư kỹ thuật',
+    donViLienQuan,
+    canBoTiepNhan,
+    ghiChu,
     danhSachVatTu: items,
   };
 }

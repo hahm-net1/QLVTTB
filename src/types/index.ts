@@ -42,6 +42,10 @@ export interface AIOCRExtractResult {
   donViLienQuan?: string;
   canBoTiepNhan?: string;
   ghiChu?: string;
+  viTriKho?: string;
+  soPhieuGoc?: string;
+  namChungTu?: string;
+  phanDoanKho?: string;
   danhSachVatTu?: Array<{
     maVT?: string;
     tenVT?: string;
