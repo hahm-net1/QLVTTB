@@ -3,18 +3,12 @@ import {
   Sparkles, 
   X, 
   Upload, 
-  FileText, 
   Camera, 
   CheckCircle2, 
   Loader2, 
-  ArrowRight, 
-  FileUp, 
   ClipboardPaste,
-  HelpCircle,
-  Eye,
   Check
 } from 'lucide-react';
-import { OCR_SAMPLE_PRESETS } from '../constants/sampleData';
 import { extractDocumentWithAI, parseTextDocumentHeuristic } from '../utils/ocrParser';
 import { AIOCRExtractResult, PhieuGiaoDich, ChiTietVatTu } from '../types';
 import { getLoaiChungTuBadge, getTrangThaiSauSuaBadge } from '../utils/formatters';
@@ -40,12 +34,6 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!isOpen) return null;
-
-  const handleSelectPreset = (preset: typeof OCR_SAMPLE_PRESETS[0]) => {
-    setInputText(preset.text);
-    setImagePreview(null);
-    handleProcess(preset.text, undefined);
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -109,13 +97,16 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
   const handleApply = () => {
     if (!extractedResult) return;
 
-    // Tuân thủ như lúc nhập thủ công: chỉ có trạng thái là "Tiếp nhận mới"
+    // Tuân thủ: không tự bịa thêm số, nếu không tìm thấy thì để chuỗi rỗng ""; Trạng thái là "Tiếp nhận mới"
     const formattedVatTu: ChiTietVatTu[] = (extractedResult.danhSachVatTu || []).map((item, idx) => {
+      const maVT = item.Ma_VT || item.maVT || '';
+      const tenVT = item.Ten_VT || item.tenVT || '';
+      const serialNumber = item.Serial_Number || item.serialNumber || '';
       return {
         id: `vt-${Date.now()}-${idx}`,
-        maVT: item.maVT || 'ONT-GW040H',
-        tenVT: item.tenVT || 'Thiết bị viễn thông',
-        serialNumber: item.serialNumber || `SN-${Math.floor(100000 + Math.random() * 900000)}`,
+        maVT,
+        tenVT,
+        serialNumber,
         trangThaiSauSua: item.trangThaiSauSua || 'TOT',
         soPNKHoanTat: '',
         trangThaiHienTai: 'Tiếp nhận mới',
@@ -163,7 +154,7 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
           </button>
         </div>
 
-        {/* Input Methods Tab Bar (Đã xóa tab 'Mẫu biên bản thử nghiệm' và ẩn thanh trạng thái theo yêu cầu) */}
+        {/* Input Methods Tab Bar */}
         <div className="flex border-b border-slate-200 bg-slate-50 text-xs font-medium">
           <button
             onClick={() => setActiveTab('text')}
@@ -192,35 +183,9 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* TAB 1: TEXT NOTE & STANDARD TEST SAMPLES */}
+          {/* TAB 1: TEXT NOTE */}
           {activeTab === 'text' && (
             <div className="space-y-3">
-              {/* Cập nhật các mẫu thử nghiệm chuẩn */}
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-[#00a3e0]" />
-                  <span>Mẫu thử nghiệm chuẩn:</span>
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {OCR_SAMPLE_PRESETS.map((preset, pIdx) => (
-                    <button
-                      key={pIdx}
-                      type="button"
-                      onClick={() => handleSelectPreset(preset)}
-                      className={`px-2.5 py-1 text-[11px] font-mono font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1 shadow-2xs ${
-                        preset.type === 'PNK'
-                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
-                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-300'
-                      }`}
-                      title={preset.name}
-                    >
-                      <span>{preset.type}:</span>
-                      <span className="underline decoration-dotted">{preset.soChungTu || (preset.type === 'PNK' ? '9325/N/26/KTTC-C1-KH04' : '14853/X/26/KTTC-C1-KH01')}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Dán nội dung tin nhắn, biên bản text hoặc ghi chú bàn giao:
@@ -229,15 +194,16 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   rows={6}
-                  placeholder={`Ví dụ Phiếu nhập kho:
-Số: 9325/N/26/KTTC-C1-KH04
+                  placeholder={`Ví dụ nội dung chứng từ:
+Phiếu nhập kho số: 9325/N/26/KTTC-C1-KH04
 Vị trí kho: KTTC-C1 | Phân đoạn kho: KH04
-1. ONT iGate GW040-H | Mã VT: ONT-GW040H | S/N: VNPT26H932501 | Trạng thái: Tiếp nhận mới
+1. ONT iGate GW040-H | Mã VT: ONT-GW040H | S/N: VNPT26H932501
+2. Wifi Mesh EW12SX | Mã VT: MESH-EW12SX | S/N: MESH26E932502
 
 Hoặc Phiếu xuất kho:
 Số: 14853/X/26/KTTC-C1-KH01
 Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
-1. ONT iGate GW040-H | S/N: VNPT26X148531 | Trạng thái: Tiếp nhận mới`}
+1. ONT iGate GW040-H | S/N: VNPT26X148531`}
                   className="w-full text-xs font-mono p-3 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00a3e0]"
                 />
               </div>
@@ -433,9 +399,22 @@ Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
                         className="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-xs"
                       >
                         <div className="min-w-0 pr-2">
-                          <p className="font-bold text-slate-800 truncate">{item.tenVT}</p>
+                          <p className="font-bold text-slate-800 truncate">
+                            {item.tenVT || item.Ten_VT || '(Chưa xác định tên)'}
+                            {(item.maVT || item.Ma_VT) && (
+                              <span className="ml-2 font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-normal">
+                                {item.maVT || item.Ma_VT}
+                              </span>
+                            )}
+                          </p>
                           <div className="flex items-center gap-2 mt-0.5 text-[11px]">
-                            <span className="font-mono text-slate-500">S/N: {item.serialNumber}</span>
+                            <span className="font-mono text-slate-500">
+                              S/N: {item.serialNumber || item.Serial_Number ? (
+                                <strong className="text-slate-800">{item.serialNumber || item.Serial_Number}</strong>
+                              ) : (
+                                <span className="text-slate-400 italic font-normal">Không có S/N</span>
+                              )}
+                            </span>
                             <span className="text-slate-400">•</span>
                             <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-200 text-[10px]">
                               {item.trangThaiHienTai || 'Tiếp nhận mới'}

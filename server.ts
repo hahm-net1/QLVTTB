@@ -36,64 +36,33 @@ app.post('/api/ai-extract', async (req, res) => {
   try {
     const ai = new GoogleGenAI();
 
-    const systemPrompt = `Bạn là hệ thống AI OCR chuyên dụng phân tích và trích xuất chứng từ kho, biên bản giao nhận và phiếu xuất/nhập vật tư viễn thông.
+    const systemPrompt = `Bạn là một chuyên gia bóc tách dữ liệu chứng từ kho (PXK, PNK). Nhiệm vụ của bạn là đọc hình ảnh/PDF hoặc văn bản được cung cấp và trích xuất chính xác thông tin thành MỘT ĐỐI TƯỢNG JSON thuần túy trong đó quan tâm các đối tượng sau:
+- "soChungTu": Số chứng từ của phiếu
+- "soPhieuGoc": Số thứ tự phiếu (ví dụ 9325 hoặc 14853)
+- "loaiChungTu": "PNK" (Phiếu nhập kho) hoặc "PXK" (Phiếu xuất kho) hoặc "GUI_MUON" (Biên bản bàn giao / gửi mượn)
+- "viTriKho": Vị trí kho (ví dụ KTTC-C1)
+- "namChungTu": Năm chứng từ (ví dụ 2026)
+- "phanDoanKho": Phân đoạn/ngăn kho (ví dụ KH04, KH01)
+- "ngayTiepNhan": Ngày lập phiếu / tiếp nhận (định dạng YYYY-MM-DD)
+- "donViLienQuan": Đơn vị giao/nhận hoặc kho liên quan
+- "canBoTiepNhan": Cán bộ tiếp nhận / người nhận / người lập phiếu
+- "ghiChu": Ghi chú / lý do xuất nhập
+- "danhSachVatTu": Mảng các chi tiết vật tư, mỗi phần tử gồm:
+    + "Ma_VT": Mã vật tư thiết bị
+    + "Ten_VT": Tên thiết bị / vật tư / quy cách
+    + "Serial_Number": Số S/N hoặc Serial của thiết bị
+    + "trangThaiSauSua": Tình trạng kỹ thuật ("TOT", "HONG", hoặc "LOI")
+    + "trangThaiHienTai": "Tiếp nhận mới"
 
-ĐẶC BIỆT CHÚ Ý CẤU TRÚC SỐ CHỨNG TỪ THEO CHUẨN ĐƠN VỊ:
-1. Phiếu Nhập Kho (PNK):
-   - Cấu trúc trường số: "[số_phiếu]/N/[năm]/[vị_trí_kho]-[phân_đoạn_kho]"
-   - Ví dụ thực tế: "Số: 9325/N/26/KTTC-C1-KH04"
-     + "9325": Là số PNK (số phiếu gốc)
-     + "N": Đại diện cho Phiếu Nhập Kho -> loaiChungTu bắt buộc là "PNK"
-     + "26": Đại diện cho năm 2026
-     + "KTTC-C1": Vị trí kho (Kho Kỹ thuật thi công C1)
-     + "KH04": Phân đoạn/ngăn kho hàng 04
-     + soChungTu cần lấy trọn vẹn: "9325/N/26/KTTC-C1-KH04"
-
-2. Phiếu Xuất Kho (PXK):
-   - Cấu trúc trường số: "[số_phiếu]/X/[năm]/[vị_trí_kho]-[phân_đoạn_kho]"
-   - Ví dụ thực tế: "Số: 14853/X/26/KTTC-C1-KH01"
-     + "14853": Là số PXK (số phiếu gốc)
-     + "X": Đại diện cho Phiếu Xuất Kho -> loaiChungTu bắt buộc là "PXK"
-     + "26": Đại diện cho năm 2026
-     + "KTTC-C1": Vị trí kho
-     + "KH01": Phân đoạn/ngăn kho hàng 01
-     + soChungTu cần lấy trọn vẹn: "14853/X/26/KTTC-C1-KH01"
-
-3. Biên bản giao nhận / Gửi mượn (BBBG / GM):
-   - Có thể có dạng: "[số]/BBBG/[năm]/[kho]" hoặc "[số]/GM/[năm]/[kho]" -> loaiChungTu là "GUI_MUON"
-
-NHIỆM VỤ:
-Quét ảnh chứng từ hoặc phân tích văn bản để trích xuất đầy đủ và chính xác thông tin thành JSON hợp lệ.
-
-Định dạng JSON cần trả về:
-{
-  "soChungTu": "Lấy chính xác toàn bộ số phiếu, ví dụ: 9325/N/26/KTTC-C1-KH04 hoặc 14853/X/26/KTTC-C1-KH01",
-  "soPhieuGoc": "Số thứ tự phiếu (ví dụ 9325 hoặc 14853)",
-  "loaiChungTu": "PNK" | "PXK" | "GUI_MUON",
-  "viTriKho": "Vị trí kho bóc tách được (ví dụ KTTC-C1)",
-  "namChungTu": "2026",
-  "phanDoanKho": "Phân đoạn kho (ví dụ KH04, KH01)",
-  "ngayTiepNhan": "YYYY-MM-DD (dựa theo ngày tháng trên phiếu hoặc năm 2026)",
-  "donViLienQuan": "Tên đơn vị giao hoặc nhận, hoặc vị trí kho",
-  "canBoTiepNhan": "Tên cán bộ kỹ thuật, thủ kho, người lập phiếu hoặc người nhận",
-  "ghiChu": "Lý do nhập/xuất hoặc ghi chú",
-  "danhSachVatTu": [
-    {
-      "maVT": "Mã vật tư thiết bị (ví dụ ONT-GW040H, MESH-EW12SX, SW-CISCO-2960, COMWAY-C6, ADP-12V15A...)",
-      "tenVT": "Tên đầy đủ thiết bị / quy cách",
-      "serialNumber": "Số serial / S/N / IMEI chính xác của thiết bị",
-      "trangThaiSauSua": "TOT" | "HONG" | "LOI",
-      "trangThaiHienTai": "Tiếp nhận mới"
-    }
-  ]
-}
-
-Quy tắc bắt buộc:
-- Nếu thấy ký hiệu /N/ hoặc chữ N trong số phiếu -> loaiChungTu là "PNK".
-- Nếu thấy ký hiệu /X/ hoặc chữ X trong số phiếu -> loaiChungTu là "PXK".
-- QUY TẮC TRƯỜNG TRẠNG THÁI: Tuân thủ như lúc nhập thủ công, trường trangThaiHienTai của mọi vật tư thiết bị BẮT BUỘC luôn luôn chỉ có một trạng thái duy nhất là "Tiếp nhận mới".
-- Serial number phải được bóc tách tỉ mỉ từ từng dòng trong bảng danh mục vật tư.
-- Chỉ trả về đúng JSON hợp lệ, không bọc markdown hay text ngoài JSON.`;
+LƯU Ý QUAN TRỌNG:
+- Hãy đọc kỹ từng dòng trong bảng chi tiết vật tư của phiếu.
+- Số Serial (S/N) thường là các dãy số/chữ cái dài, hãy đọc từng ký tự thật chính xác, không được tự bịa thêm số.
+- Nếu trường nào không tìm thấy trên phiếu, hãy để giá trị là chuỗi rỗng "". Tuyệt đối không tự bịa thêm số serial, mã vật tư hoặc bất kỳ thông tin nào không xuất hiện trên phiếu.
+- Trường "trangThaiHienTai" tuân thủ như lúc nhập thủ công chỉ có trạng thái là "Tiếp nhận mới".
+- Quy chuẩn số chứng từ:
+    + PNK: cấu trúc [số]/N/[năm]/[kho] (ví dụ: 9325/N/26/KTTC-C1-KH04, trong đó "9325" là số PNK, "N" là PNK, "26" là năm 2026, "KTTC-C1" là vị trí kho)
+    + PXK: cấu trúc [số]/X/[năm]/[kho] (ví dụ: 14853/X/26/KTTC-C1-KH01, trong đó "14853" là số PXK, "X" là PXK, "26" là năm 2026, "KTTC-C1" là vị trí kho)
+- Chỉ trả về duy nhất MỘT ĐỐI TƯỢNG JSON thuần túy, không có văn bản giải thích hay bọc markdown ngoài JSON.`;
 
     const contents: any[] = [];
     contents.push({ text: systemPrompt });
@@ -141,9 +110,42 @@ Quy tắc bắt buộc:
     outputText = outputText.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
     const parsed = JSON.parse(outputText);
 
+    // Chuẩn hóa và mapping các trường Ma_VT, Ten_VT, Serial_Number
+    const rawItems = parsed.danhSachVatTu || parsed.danh_sach_vat_tu || parsed.items || [];
+    const normalizedItems = rawItems.map((it: any) => {
+      const maVT = (it.Ma_VT ?? it.maVT ?? '').toString().trim();
+      const tenVT = (it.Ten_VT ?? it.tenVT ?? '').toString().trim();
+      const serialNumber = (it.Serial_Number ?? it.serialNumber ?? it.sn ?? it.SN ?? '').toString().trim();
+      return {
+        maVT,
+        tenVT,
+        serialNumber,
+        Ma_VT: maVT,
+        Ten_VT: tenVT,
+        Serial_Number: serialNumber,
+        trangThaiSauSua: it.trangThaiSauSua || 'TOT',
+        trangThaiHienTai: 'Tiếp nhận mới',
+        soPNKHoanTat: '',
+      };
+    });
+
+    const normalizedResult = {
+      soChungTu: parsed.soChungTu || '',
+      soPhieuGoc: parsed.soPhieuGoc || '',
+      loaiChungTu: parsed.loaiChungTu || 'PXK',
+      viTriKho: parsed.viTriKho || '',
+      namChungTu: parsed.namChungTu || '',
+      phanDoanKho: parsed.phanDoanKho || '',
+      ngayTiepNhan: parsed.ngayTiepNhan || '',
+      donViLienQuan: parsed.donViLienQuan || '',
+      canBoTiepNhan: parsed.canBoTiepNhan || '',
+      ghiChu: parsed.ghiChu || '',
+      danhSachVatTu: normalizedItems,
+    };
+
     return res.json({
       success: true,
-      result: parsed,
+      result: normalizedResult,
     });
   } catch (error: any) {
     console.warn('Gemini OCR API returned error, applying intelligent heuristic extractor:', error?.message);
@@ -307,21 +309,15 @@ function parseTextFallback(rawText: string) {
       items.push({
         maVT,
         tenVT,
-        serialNumber: snMatch ? snMatch[1] : `VNPT24H${Math.floor(100000 + Math.random() * 900000)}`,
+        serialNumber: snMatch ? snMatch[1] : '',
+        Ma_VT: maVT,
+        Ten_VT: tenVT,
+        Serial_Number: snMatch ? snMatch[1] : '',
         trangThaiSauSua,
         trangThaiHienTai,
+        soPNKHoanTat: '',
       });
     }
-  }
-
-  if (items.length === 0) {
-    items.push({
-      maVT: 'ONT-GW040H',
-      tenVT: 'ONT iGate GW040-H Băng tần kép 2.4/5GHz',
-      serialNumber: `VNPT24H${Math.floor(100000 + Math.random() * 900000)}`,
-      trangThaiSauSua: 'TOT',
-      trangThaiHienTai: 'Tiếp nhận mới',
-    });
   }
 
   return {

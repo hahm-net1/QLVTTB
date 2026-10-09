@@ -50,6 +50,9 @@ export interface AIOCRExtractResult {
     maVT?: string;
     tenVT?: string;
     serialNumber?: string;
+    Ma_VT?: string;
+    Ten_VT?: string;
+    Serial_Number?: string;
     trangThaiSauSua?: TrangThaiSauSua;
     soPNKHoanTat?: string;
     trangThaiHienTai?: string;

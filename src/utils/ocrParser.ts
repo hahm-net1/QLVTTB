@@ -188,26 +188,17 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
       }
 
       vatTuItems.push({
-        maVT: maVT || 'ONT-GW040H',
-        tenVT: tenVT || 'Thiết bị viễn thông',
-        serialNumber: serialNumber || `VT26H-${Math.floor(100000 + Math.random() * 900000)}`,
+        maVT: maVT || '',
+        tenVT: tenVT || '',
+        serialNumber: serialNumber || '',
+        Ma_VT: maVT || '',
+        Ten_VT: tenVT || '',
+        Serial_Number: serialNumber || '',
         trangThaiSauSua,
         soPNKHoanTat: '',
         trangThaiHienTai,
       });
     }
-  }
-
-  // If no items matched, synthesize realistic item
-  if (vatTuItems.length === 0) {
-    vatTuItems.push({
-      maVT: 'ONT-GW040H',
-      tenVT: 'ONT iGate GW040-H Băng tần kép 2.4/5GHz',
-      serialNumber: `VNPT26-${Math.floor(100000 + Math.random() * 900000)}`,
-      trangThaiSauSua: 'TOT',
-      soPNKHoanTat: '',
-      trangThaiHienTai: 'Tiếp nhận mới',
-    });
   }
 
   result.danhSachVatTu = vatTuItems;
@@ -236,7 +227,28 @@ export async function extractDocumentWithAI(
     if (res.ok) {
       const data = await res.json();
       if (data && data.success && data.result) {
-        return data.result;
+        const rawRes = data.result;
+        const normalizedItems = (rawRes.danhSachVatTu || []).map((it: any) => {
+          const maVT = (it.Ma_VT ?? it.maVT ?? '').toString().trim();
+          const tenVT = (it.Ten_VT ?? it.tenVT ?? '').toString().trim();
+          const serialNumber = (it.Serial_Number ?? it.serialNumber ?? '').toString().trim();
+          return {
+            maVT,
+            tenVT,
+            serialNumber,
+            Ma_VT: maVT,
+            Ten_VT: tenVT,
+            Serial_Number: serialNumber,
+            trangThaiSauSua: it.trangThaiSauSua || 'TOT',
+            trangThaiHienTai: 'Tiếp nhận mới',
+            soPNKHoanTat: '',
+          };
+        });
+
+        return {
+          ...rawRes,
+          danhSachVatTu: normalizedItems,
+        };
       }
     }
   } catch (err) {
