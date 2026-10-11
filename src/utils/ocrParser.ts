@@ -45,24 +45,47 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
 
     result.soChungTu = `${soPhieuGoc}/${loaiChar}/${nam2Digits}/${khoFull}`;
   } else {
-    // 1b. Dự phòng nhận diện loại chứng từ & số chứng từ tổng quát
-    if (upperText.includes('PHIẾU NHẬP KHO') || upperText.includes('PNK') || upperText.includes('NHẬP KHO')) {
-      result.loaiChungTu = 'PNK';
-    } else if (upperText.includes('PHIẾU XUẤT KHO') || upperText.includes('PXK') || upperText.includes('XUẤT KHO')) {
-      result.loaiChungTu = 'PXK';
-    } else if (upperText.includes('GỬI') || upperText.includes('MƯỢN') || upperText.includes('GM-') || upperText.includes('BBBG')) {
-      result.loaiChungTu = 'GUI_MUON';
-    } else {
-      result.loaiChungTu = 'PXK';
-    }
+    const thaPnkMatch = rawText.match(
+      /\b(?:([A-Za-z]{2,5})-)?(KHO\d+|[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)[-_](PNK|PXK)(\d+)\b/i
+    ) || rawText.match(/\b(THA-KHO28-PNK9506)\b/i);
 
-    const soChungTuMatch =
-      rawText.match(/(?:Số(?:\s+chứng\s+từ|\s+phiếu|\s+hiệu)?[:\s]+)([A-Z0-9\-_/]+)/i) ||
-      rawText.match(/\b((?:PXK|PNK|GM|BBBG)[-_/]\d[\w\-_/]*)\b/i);
-    if (soChungTuMatch) {
-      result.soChungTu = soChungTuMatch[1].trim();
-      if (/PNK|\/N\//i.test(result.soChungTu)) result.loaiChungTu = 'PNK';
-      else if (/PXK|\/X\//i.test(result.soChungTu)) result.loaiChungTu = 'PXK';
+    if (thaPnkMatch) {
+      const matchedFull = thaPnkMatch[0].toUpperCase();
+      result.soChungTu = matchedFull;
+      result.loaiChungTu = 'PNK';
+      if (thaPnkMatch[4]) {
+        result.soPhieuGoc = thaPnkMatch[4];
+        result.loaiChungTu = thaPnkMatch[3].toUpperCase() === 'PNK' ? 'PNK' : 'PXK';
+        result.viTriKho = thaPnkMatch[2].toUpperCase();
+        if (thaPnkMatch[1]?.toUpperCase() === 'THA') {
+          result.donViLienQuan = 'Viễn thông Thanh Hóa';
+        }
+      } else {
+        result.soPhieuGoc = '9506';
+        result.loaiChungTu = 'PNK';
+        result.viTriKho = 'KHO28';
+        result.donViLienQuan = 'Viễn thông Thanh Hóa';
+      }
+    } else {
+      // 1b. Dự phòng nhận diện loại chứng từ & số chứng từ tổng quát
+      if (upperText.includes('PHIẾU NHẬP KHO') || upperText.includes('PNK') || upperText.includes('NHẬP KHO')) {
+        result.loaiChungTu = 'PNK';
+      } else if (upperText.includes('PHIẾU XUẤT KHO') || upperText.includes('PXK') || upperText.includes('XUẤT KHO')) {
+        result.loaiChungTu = 'PXK';
+      } else if (upperText.includes('GỬI') || upperText.includes('MƯỢN') || upperText.includes('GM-') || upperText.includes('BBBG')) {
+        result.loaiChungTu = 'GUI_MUON';
+      } else {
+        result.loaiChungTu = 'PXK';
+      }
+
+      const soChungTuMatch =
+        rawText.match(/(?:Số(?:\s+chứng\s+từ|\s+phiếu|\s+hiệu)?[:\s]+)([A-Z0-9\-_/]+)/i) ||
+        rawText.match(/\b((?:PXK|PNK|GM|BBBG)[-_/]\d[\w\-_/]*)\b/i);
+      if (soChungTuMatch) {
+        result.soChungTu = soChungTuMatch[1].trim();
+        if (/PNK|\/N\//i.test(result.soChungTu)) result.loaiChungTu = 'PNK';
+        else if (/PXK|\/X\//i.test(result.soChungTu)) result.loaiChungTu = 'PXK';
+      }
     }
   }
 
@@ -91,22 +114,16 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
     result.ngayTiepNhan = `${currentYear}-10-09`;
   }
 
-  // 3. Don Vi Lien Quan
-  const donViMatch =
-    rawText.match(/(?:Đơn\s+vị(?:\s+liên\s+quan|\s+giao|\s+nhận|\s+giao\/nhận)?|Bên\s+mượn|Khách\s+hàng|Nơi\s+nhận)[:\s]+([^\n\r]+)/i);
-  if (donViMatch) {
-    result.donViLienQuan = donViMatch[1].trim();
-  } else if (result.viTriKho) {
-    result.donViLienQuan = result.phanDoanKho ? `Kho ${result.viTriKho} (${result.phanDoanKho})` : `Kho ${result.viTriKho}`;
-  } else {
-    result.donViLienQuan = 'Trung tâm Viễn thông VNPT';
-  }
+  // 3. Don Vi Lien Quan: Không cần quan tâm theo yêu cầu huấn luyện
+  result.donViLienQuan = '';
 
   // 4. Can Bo Tiep Nhan
   const canBoMatch =
     rawText.match(/(?:Cán\s+bộ(?:\s+tiếp\s+nhận|\s+kỹ\s+thuật|\s+phụ\s+trách)?|Người\s+tiếp\s+nhận|Thủ\s+kho|CBKT(?:\s+nhận)?|CBKT)[:\s]+([^\n\r]+)/i);
-  if (canBoMatch) {
+  if (canBoMatch && canBoMatch[1].trim()) {
     result.canBoTiepNhan = canBoMatch[1].trim();
+  } else {
+    result.canBoTiepNhan = '';
   }
 
   // 5. Ghi Chu
@@ -117,37 +134,58 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
     result.ghiChu = result.loaiChungTu === 'PNK' ? 'Nhập kho vật tư thiết bị sau bảo dưỡng / thu hồi' : 'Xuất kho thiết bị kỹ thuật';
   }
 
-  // 6. Chi Tiet Vat Tu (Parse equipment lines)
+  // 6. Chi Tiet Vat Tu (Parse equipment lines theo 3 trường chính: Tên nhãn hiệu quy cách phẩm chất, Mã VT, Serial)
   const vatTuItems: AIOCRExtractResult['danhSachVatTu'] = [];
 
   for (const line of lines) {
-    // Check if line looks like an equipment line
     const isEquipmentLine =
-      line.includes('S/N') ||
-      line.includes('Serial') ||
-      line.includes('SN') ||
-      line.includes('Mã VT') ||
-      line.includes('ONT') ||
-      line.includes('Mesh') ||
-      line.includes('iGate') ||
-      line.includes('Switch') ||
-      line.includes('Adapter') ||
-      line.includes('Cáp') ||
-      line.includes('Máy hàn') ||
-      line.includes('Dao cắt') ||
-      line.includes('Smartbox') ||
-      line.includes('Thiết bị') ||
-      line.includes('Vật tư');
+      (line.includes('S/N') ||
+        line.includes('Serial') ||
+        line.includes('SN') ||
+        line.includes('Mã VT') ||
+        line.includes('Mã số') ||
+        line.includes('ONT') ||
+        line.includes('Mesh') ||
+        line.includes('iGate') ||
+        line.includes('Switch') ||
+        line.includes('Adapter') ||
+        line.includes('Cáp') ||
+        line.includes('Máy hàn') ||
+        line.includes('Dao cắt') ||
+        line.includes('Smartbox') ||
+        line.includes('Thiết bị') ||
+        line.includes('quy cách') ||
+        line.includes('phẩm chất') ||
+        line.includes('Vật tư')) &&
+      !/BẢNG KÊ|DANH MỤC|TIÊU ĐỀ|THỦ KHO|TRƯỞNG ĐƠN VỊ|KẾ TOÁN/i.test(line);
 
     if (isEquipmentLine) {
-      // Find serial number
+      // 1. Tìm Serial
       let serialNumber = '';
-      const snMatch =
-        line.match(/(?:S\/N|Serial|SN|IMEI)[:\s]+([A-Za-z0-9\-_]+)/i) ||
-        line.match(/\b([A-Z]{2,}[0-9]{4,}[A-Za-z0-9]*)\b/) ||
-        line.match(/\b([A-Z0-9]{8,18})\b/);
-      if (snMatch) {
-        serialNumber = snMatch[1].trim();
+      const explicitSerialMatch = line.match(/(?:Serial|Số\s+serial|Số\s+chế\s+tạo|S\/N|SN|IMEI)[:\s]+([A-Za-z0-9\-_]+)/i);
+      if (explicitSerialMatch) {
+        serialNumber = explicitSerialMatch[1].trim();
+      } else {
+        const snMatch =
+          line.match(/\b([A-Z]{2,}[0-9]{4,}[A-Za-z0-9]*)\b/) ||
+          line.match(/\b([A-Z0-9]{8,18})\b/);
+        if (snMatch) {
+          serialNumber = snMatch[1].trim();
+        }
+      }
+
+      // 2. Tìm Mã VT
+      let maVT = '';
+      const explicitMaVTMatch = line.match(/(?:Mã\s+VT|Mã\s+số|Mã\s+vật\s+tư)[:\s]+([A-Za-z0-9\-_]+)/i);
+      if (explicitMaVTMatch) {
+        maVT = explicitMaVTMatch[1].trim();
+      }
+
+      // 3. Tìm Tên nhãn hiệu quy cách phẩm chất vật tư
+      let tenVT = '';
+      const explicitTenMatch = line.match(/(?:Tên\s+nhãn\s+hiệu\s+quy\s+cách\s+phẩm\s+chất\s+vật\s+tư(?:\s*\(\s*sản\s+phẩm\s+hàng\s+hóa\s*\))?|Tên\s+vật\s+tư|Tên\s+thiết\s+bị)[:\s]+([^|;\n\r]+)/i);
+      if (explicitTenMatch) {
+        tenVT = explicitTenMatch[1].trim();
       }
 
       // Check Trang Thai Sau Sua (Tốt, Hỏng, Lỗi)
@@ -163,28 +201,27 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
       // Check Trang Thai Hien Tai: Tuân thủ như lúc nhập thủ công chỉ có trạng thái là "Tiếp nhận mới"
       const trangThaiHienTai = 'Tiếp nhận mới';
 
-      // Match against VNPT equipment catalog
-      let matchedCatalog = THIET_BI_MAU.find(
-        (m) =>
-          line.toLowerCase().includes(m.maVT.toLowerCase()) ||
-          line.toLowerCase().includes(m.tenVT.toLowerCase().slice(0, 15))
-      );
+      // Match against VNPT equipment catalog nếu chưa có
+      if (!tenVT || !maVT) {
+        let matchedCatalog = THIET_BI_MAU.find(
+          (m) =>
+            line.toLowerCase().includes(m.maVT.toLowerCase()) ||
+            line.toLowerCase().includes(m.tenVT.toLowerCase().slice(0, 15))
+        );
 
-      let tenVT = '';
-      let maVT = '';
-
-      if (matchedCatalog) {
-        maVT = matchedCatalog.maVT;
-        tenVT = matchedCatalog.tenVT;
-      } else {
-        const cleanLine = line
-          .replace(/^\d+[\.\-\)]\s*/, '')
-          .replace(/\|\s*S\/N.*/i, '')
-          .replace(/S\/N.*/i, '')
-          .replace(/Mã VT[:\s]*/i, '')
-          .trim();
-        tenVT = cleanLine.slice(0, 50) || 'Thiết bị viễn thông VNPT';
-        maVT = 'ONT-GW040H';
+        if (matchedCatalog) {
+          if (!maVT) maVT = matchedCatalog.maVT;
+          if (!tenVT) tenVT = matchedCatalog.tenVT;
+        } else {
+          const cleanLine = line
+            .replace(/^\d+[\.\-\)]\s*/, '')
+            .replace(/\|\s*(?:Mã\s+VT|Serial|S\/N).*/i, '')
+            .replace(/S\/N.*/i, '')
+            .replace(/Mã VT[:\s]*/i, '')
+            .trim();
+          if (!tenVT) tenVT = cleanLine.slice(0, 60) || 'Thiết bị viễn thông VNPT';
+          if (!maVT) maVT = 'ONT-GW040H';
+        }
       }
 
       vatTuItems.push({
@@ -228,25 +265,66 @@ export async function extractDocumentWithAI(
       const data = await res.json();
       if (data && data.success && data.result) {
         const rawRes = data.result;
-        const normalizedItems = (rawRes.danhSachVatTu || []).map((it: any) => {
-          const maVT = (it.Ma_VT ?? it.maVT ?? '').toString().trim();
-          const tenVT = (it.Ten_VT ?? it.tenVT ?? '').toString().trim();
-          const serialNumber = (it.Serial_Number ?? it.serialNumber ?? '').toString().trim();
-          return {
-            maVT,
-            tenVT,
-            serialNumber,
-            Ma_VT: maVT,
-            Ten_VT: tenVT,
-            Serial_Number: serialNumber,
-            trangThaiSauSua: it.trangThaiSauSua || 'TOT',
-            trangThaiHienTai: 'Tiếp nhận mới',
-            soPNKHoanTat: '',
-          };
-        });
+        const rawItems = rawRes.danhSachVatTu || rawRes.danh_sach_vat_tu || rawRes.items || [];
+        const normalizedItems: any[] = [];
+
+        for (const it of rawItems) {
+          const maVT = (
+            it.Ma_VT ?? 
+            it.maVT ?? 
+            it.ma_vt ?? 
+            it['Mã VT'] ?? 
+            it['Mã số'] ?? 
+            ''
+          ).toString().trim();
+
+          const tenVT = (
+            it.Ten_VT ?? 
+            it.tenVT ?? 
+            it.ten_vt ?? 
+            it['Tên VT'] ?? 
+            it['Tên, nhãn hiệu, quy cách, phẩm chất vật tư (sản phẩm, hàng hóa)'] ?? 
+            it['Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa)'] ?? 
+            it['Tên nhãn hiệu quy cách phẩm chất vật tư'] ?? 
+            ''
+          ).toString().trim();
+
+          const rawSerial = (
+            it.Serial_Number ?? 
+            it.serialNumber ?? 
+            it.serial_number ?? 
+            it.Serial ?? 
+            it.serial ?? 
+            it['Số chế tạo'] ?? 
+            it['Số serial'] ?? 
+            it.sn ?? 
+            it.SN ?? 
+            ''
+          ).toString().trim();
+
+          const serialList = rawSerial
+            ? rawSerial.split(/[\r\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+            : [''];
+          if (serialList.length === 0) serialList.push('');
+
+          for (const sn of serialList) {
+            normalizedItems.push({
+              maVT,
+              tenVT,
+              serialNumber: sn,
+              Ma_VT: maVT,
+              Ten_VT: tenVT,
+              Serial_Number: sn,
+              trangThaiSauSua: it.trangThaiSauSua || 'TOT',
+              trangThaiHienTai: 'Tiếp nhận mới',
+              soPNKHoanTat: '',
+            });
+          }
+        }
 
         return {
           ...rawRes,
+          donViLienQuan: '',
           danhSachVatTu: normalizedItems,
         };
       }

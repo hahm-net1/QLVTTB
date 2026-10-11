@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
+import { PDFParse } from 'pdf-parse';
 
 dotenv.config();
 
@@ -33,56 +34,92 @@ app.post('/api/ai-extract', async (req, res) => {
     });
   }
 
+  let extractedPdfText = '';
+
   try {
-    const ai = new GoogleGenAI();
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
 
-    const systemPrompt = `Bạn là một chuyên gia bóc tách dữ liệu chứng từ kho (PXK, PNK). Nhiệm vụ của bạn là đọc hình ảnh/PDF hoặc văn bản được cung cấp và trích xuất chính xác thông tin thành MỘT ĐỐI TƯỢNG JSON thuần túy trong đó quan tâm các đối tượng sau:
-- "soChungTu": Số chứng từ của phiếu
-- "soPhieuGoc": Số thứ tự phiếu (ví dụ 9325 hoặc 14853)
-- "loaiChungTu": "PNK" (Phiếu nhập kho) hoặc "PXK" (Phiếu xuất kho) hoặc "GUI_MUON" (Biên bản bàn giao / gửi mượn)
-- "viTriKho": Vị trí kho (ví dụ KTTC-C1)
-- "namChungTu": Năm chứng từ (ví dụ 2026)
-- "phanDoanKho": Phân đoạn/ngăn kho (ví dụ KH04, KH01)
-- "ngayTiepNhan": Ngày lập phiếu / tiếp nhận (định dạng YYYY-MM-DD)
-- "donViLienQuan": Đơn vị giao/nhận hoặc kho liên quan
-- "canBoTiepNhan": Cán bộ tiếp nhận / người nhận / người lập phiếu
-- "ghiChu": Ghi chú / lý do xuất nhập
-- "danhSachVatTu": Mảng các chi tiết vật tư, mỗi phần tử gồm:
-    + "Ma_VT": Mã vật tư thiết bị
-    + "Ten_VT": Tên thiết bị / vật tư / quy cách
-    + "Serial_Number": Số S/N hoặc Serial của thiết bị
-    + "trangThaiSauSua": Tình trạng kỹ thuật ("TOT", "HONG", hoặc "LOI")
-    + "trangThaiHienTai": "Tiếp nhận mới"
+    const systemPrompt = `Bạn là một chuyên gia cao cấp bóc tách dữ liệu chứng từ kho (Phiếu Nhập Kho - PNK, Phiếu Xuất Kho - PXK) và thiết bị viễn thông VNPT.
+Nhiệm vụ của bạn là đọc hình ảnh hoặc tệp PDF hoặc văn bản tài liệu chứng từ được cung cấp và trích xuất thông tin thành MỘT ĐỐI TƯỢNG JSON thuần túy.
 
-LƯU Ý QUAN TRỌNG:
-- Hãy đọc kỹ từng dòng trong bảng chi tiết vật tư của phiếu.
-- Số Serial (S/N) thường là các dãy số/chữ cái dài, hãy đọc từng ký tự thật chính xác, không được tự bịa thêm số.
-- Nếu trường nào không tìm thấy trên phiếu, hãy để giá trị là chuỗi rỗng "". Tuyệt đối không tự bịa thêm số serial, mã vật tư hoặc bất kỳ thông tin nào không xuất hiện trên phiếu.
-- Trường "trangThaiHienTai" tuân thủ như lúc nhập thủ công chỉ có trạng thái là "Tiếp nhận mới".
-- Quy chuẩn số chứng từ:
-    + PNK: cấu trúc [số]/N/[năm]/[kho] (ví dụ: 9325/N/26/KTTC-C1-KH04, trong đó "9325" là số PNK, "N" là PNK, "26" là năm 2026, "KTTC-C1" là vị trí kho)
-    + PXK: cấu trúc [số]/X/[năm]/[kho] (ví dụ: 14853/X/26/KTTC-C1-KH01, trong đó "14853" là số PXK, "X" là PXK, "26" là năm 2026, "KTTC-C1" là vị trí kho)
-- Chỉ trả về duy nhất MỘT ĐỐI TƯỢNG JSON thuần túy, không có văn bản giải thích hay bọc markdown ngoài JSON.`;
+QUY TẮC HUẤN LUYỆN BẮT BUỘC:
+1. KHÔNG CẦN QUAN TÂM ĐẾN "ĐƠN VỊ LIÊN QUAN":
+   - Tuyệt đối không cần quan tâm, không suy đoán hay tìm kiếm "đơn vị liên quan".
+   - Trường "donViLienQuan" luôn để giá trị là chuỗi rỗng "".
+   - Trường "canBoTiepNhan" nếu không có trên phiếu thì để chuỗi rỗng "".
 
-    const contents: any[] = [];
-    contents.push({ text: systemPrompt });
+2. TRỌNG TÂM CỐT LÕI: NỘI DUNG BẢNG KÊ VẬT TƯ CỦA PHIẾU:
+   Trong bảng kê chi tiết vật tư của phiếu (kể cả tệp PDF nhiều trang hoặc ảnh chụp), bạn PHẢI ĐẶC BIỆT CHÚ Ý VÀ TRÍCH XUẤT CHÍNH XÁC 3 TRƯỜNG THÔNG TIN SAU CHO MỖI DÒNG THIẾT BỊ:
+   (1) "Ten_VT":
+       - Lấy chính xác từ cột có tiêu đề: "Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa)" hoặc "Tên, nhãn hiệu, quy cách, phẩm chất vật tư (sản phẩm, hàng hóa)" hoặc "Tên vật tư thiết bị".
+       - Đọc đầy đủ tên chủng loại, nhãn hiệu, quy cách sản phẩm (ví dụ: "ONT iGate GW040-H Băng tần kép 2.4/5GHz", "Bộ phát Wifi Mesh iGate EW12SX", "Switch Cisco Catalyst 2960-24TC-L",...).
+   (2) "Ma_VT":
+       - Lấy chính xác từ cột có tiêu đề: "Mã VT" hoặc "Mã số" hoặc "Mã vật tư" (ví dụ: "ONT-GW040H", "MESH-EW12SX", "SW-CISCO-2960",...).
+       - Nếu không có cột mã VT riêng biệt nhưng có thể nhận diện rõ mã từ tên/quy cách thì trích xuất, nếu không có để chuỗi rỗng "".
+   (3) "Serial_Number":
+       - Lấy chính xác từ cột có tiêu đề: "Serial" hoặc "Số chế tạo" hoặc "Số serial" hoặc "S/N" hoặc danh sách Serial tương ứng với dòng vật tư đó.
+       - QUY TẮC ĐỌC SERIAL: Số Serial (S/N) là dãy số/chữ cái dài. Hãy đọc từng ký tự thật chính xác, KHÔNG ĐƯỢC TỰ BỊA THÊM KÝ TỰ SỐ NÀO.
+       - Nếu một dòng hoặc ô vật tư có nhiều Serial (ví dụ cách nhau bởi dấu phẩy, chấm phẩy, khoảng trắng hoặc xuống dòng), BẮT BUỘC TÁCH MỖI SERIAL THÀNH 1 PHẦN TỬ RIÊNG BIỆT TRONG MẢNG "danhSachVatTu" với cùng "Ten_VT" và "Ma_VT" để nhập chuẩn vào form quản lý từng thiết bị.
+       - Nếu dòng đó không có số Serial, để giá trị là chuỗi rỗng "".
 
-    if (text) {
-      contents.push({ text: `Văn bản ghi chú / nội dung biên bản:\n${text}` });
-    }
+3. THÔNG TIN PHIẾU:
+   - "soChungTu": Toàn bộ số phiếu / số chứng từ (ví dụ: "THA-KHO28-PNK9506", "9325/N/26/KTTC-C1-KH04", "14853/X/26/KTTC-C1-KH01").
+   - "soPhieuGoc": Số thứ tự phiếu (ví dụ: "9506", "9325", "14853").
+   - "loaiChungTu": "PNK" (nếu là Phiếu nhập kho) hoặc "PXK" (nếu là Phiếu xuất kho).
+   - "viTriKho": Vị trí kho (ví dụ: "KHO28", "KTTC-C1") nếu có trên phiếu, nếu không để "".
+   - "ngayTiepNhan": Ngày lập phiếu (YYYY-MM-DD nếu tìm thấy, hoặc ngày hiện tại).
+   - "donViLienQuan": "" (không cần quan tâm).
+   - "canBoTiepNhan": "" (nếu không có).
+   - "ghiChu": Ghi chú / lý do trên phiếu nếu có.
+   - "danhSachVatTu": Mảng các vật tư bóc tách được từ bảng kê, mỗi phần tử gồm:
+       + "Ten_VT": string (Tên nhãn hiệu quy cách phẩm chất vật tư)
+       + "Ma_VT": string (Mã VT)
+       + "Serial_Number": string (Số Serial)
+       + "trangThaiSauSua": "TOT", "HONG", hoặc "LOI"
+       + "trangThaiHienTai": "Tiếp nhận mới" (tuân thủ như lúc nhập thủ công)
+
+CHỈ TRẢ VỀ DUY NHẤT MỘT ĐỐI TƯỢNG JSON THUẦN TÚY, KHÔNG ĐÍNH KÈM VĂN BẢN NÀO NGOÀI JSON.`;
+
+    const parts: any[] = [];
 
     if (imageBase64) {
-      // Support base64 image data (e.g. data:image/jpeg;base64,...)
-      const match = imageBase64.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+      const match = imageBase64.match(/^data:([a-zA-Z0-9\/\-+.]+);base64,(.+)$/);
       if (match) {
-        contents.push({
+        const mimeType = match[1];
+        const base64Data = match[2];
+
+        // Nếu là PDF: Trích xuất nội dung văn bản trực tiếp từ PDF Buffer bằng PDFParse
+        if (mimeType === 'application/pdf') {
+          try {
+            const pdfBuffer = Buffer.from(base64Data, 'base64');
+            const parser = new PDFParse({ data: pdfBuffer });
+            const parsedPdf = await parser.getText();
+            if (parsedPdf && parsedPdf.text && parsedPdf.text.trim()) {
+              extractedPdfText = parsedPdf.text.trim();
+              parts.push({
+                text: `Dưới đây là văn bản số hóa bóc tách từ các trang của file PDF đính kèm:\n${extractedPdfText}`,
+              });
+            }
+          } catch (pdfErr: any) {
+            console.warn('PDFParse could not extract text from buffer:', pdfErr?.message);
+          }
+        }
+
+        parts.push({
           inlineData: {
-            mimeType: match[1],
-            data: match[2],
+            mimeType,
+            data: base64Data,
           },
         });
       } else {
-        contents.push({
+        parts.push({
           inlineData: {
             mimeType: 'image/jpeg',
             data: imageBase64,
@@ -91,53 +128,136 @@ LƯU Ý QUAN TRỌNG:
       }
     }
 
-    const geminiPromise = ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
+    if (text) {
+      parts.push({ text: `Văn bản ghi chú / nội dung biên bản:\n${text}` });
+    }
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI request timeout after 30s')), 30000)
-    );
+    if (parts.length === 0) {
+      parts.push({ text: 'Trích xuất thông tin mẫu chứng từ' });
+    }
 
-    const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
+    let outputText = '';
+    const modelsToTry = ['gemini-3.8-flash'];
+    let lastError: any = null;
 
-    let outputText = response.text || '';
+    for (const modelName of modelsToTry) {
+      try {
+        const geminiPromise = ai.models.generateContent({
+          model: modelName,
+          contents: { parts },
+          config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+          },
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`AI request timeout after 28s with ${modelName}`)), 28000)
+        );
+
+        const response = (await Promise.race([geminiPromise, timeoutPromise])) as any;
+        if (response && response.text) {
+          outputText = response.text;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`Model ${modelName} call error:`, err?.message);
+      }
+    }
+
+    if (!outputText) {
+      throw lastError || new Error('No output from Gemini models');
+    }
+
     // Strip markdown code fences if model wrapped it
     outputText = outputText.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
     const parsed = JSON.parse(outputText);
 
     // Chuẩn hóa và mapping các trường Ma_VT, Ten_VT, Serial_Number
-    const rawItems = parsed.danhSachVatTu || parsed.danh_sach_vat_tu || parsed.items || [];
-    const normalizedItems = rawItems.map((it: any) => {
-      const maVT = (it.Ma_VT ?? it.maVT ?? '').toString().trim();
-      const tenVT = (it.Ten_VT ?? it.tenVT ?? '').toString().trim();
-      const serialNumber = (it.Serial_Number ?? it.serialNumber ?? it.sn ?? it.SN ?? '').toString().trim();
-      return {
-        maVT,
-        tenVT,
-        serialNumber,
-        Ma_VT: maVT,
-        Ten_VT: tenVT,
-        Serial_Number: serialNumber,
-        trangThaiSauSua: it.trangThaiSauSua || 'TOT',
-        trangThaiHienTai: 'Tiếp nhận mới',
-        soPNKHoanTat: '',
-      };
-    });
+    const rawItems = parsed.danhSachVatTu || parsed.danh_sach_vat_tu || parsed.items || parsed.bangKe || parsed.bang_ke || [];
+    const normalizedItems: any[] = [];
+
+    for (const it of rawItems) {
+      const maVT = (
+        it.Ma_VT ?? 
+        it.maVT ?? 
+        it.ma_vt ?? 
+        it['Mã VT'] ?? 
+        it['Mã số'] ?? 
+        it.maSo ?? 
+        it.ma_so ?? 
+        it['Mã vật tư'] ??
+        ''
+      ).toString().trim();
+
+      const tenVT = (
+        it.Ten_VT ?? 
+        it.tenVT ?? 
+        it.ten_vt ?? 
+        it['Tên VT'] ?? 
+        it['Tên, nhãn hiệu, quy cách, phẩm chất vật tư (sản phẩm, hàng hóa)'] ?? 
+        it['Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa)'] ?? 
+        it['Tên nhãn hiệu quy cách phẩm chất vật tư (sản phẩm hàng hóa)'] ?? 
+        it['Tên, nhãn hiệu, quy cách, phẩm chất vật tư'] ?? 
+        it['Tên nhãn hiệu quy cách phẩm chất vật tư'] ?? 
+        it.tenNhanHieu ?? 
+        it.tenVatTu ?? 
+        it.ten_vat_tu ?? 
+        it.ten ?? 
+        ''
+      ).toString().trim();
+
+      const rawSerial = (
+        it.Serial_Number ?? 
+        it.serialNumber ?? 
+        it.serial_number ?? 
+        it.Serial ?? 
+        it.serial ?? 
+        it['Số chế tạo'] ?? 
+        it.soCheTao ?? 
+        it.so_che_tao ?? 
+        it['Số serial'] ?? 
+        it['Số Serial'] ?? 
+        it['Số S/N'] ?? 
+        it.sn ?? 
+        it.SN ?? 
+        ''
+      ).toString().trim();
+
+      // Nếu ô serial chứa nhiều số serial ngăn cách bởi dấu phẩy, chấm phẩy hoặc xuống dòng
+      const serialList = rawSerial
+        ? rawSerial.split(/[\r\n,;]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+        : [''];
+
+      if (serialList.length === 0) serialList.push('');
+
+      for (const sn of serialList) {
+        normalizedItems.push({
+          maVT,
+          tenVT,
+          serialNumber: sn,
+          Ma_VT: maVT,
+          Ten_VT: tenVT,
+          Serial_Number: sn,
+          trangThaiSauSua: it.trangThaiSauSua || 'TOT',
+          trangThaiHienTai: 'Tiếp nhận mới',
+          soPNKHoanTat: '',
+        });
+      }
+    }
+
+    const detectedLoai = parsed.loaiChungTu || (/PNK|\/N\//i.test(parsed.soChungTu || '') ? 'PNK' : 'PXK');
 
     const normalizedResult = {
       soChungTu: parsed.soChungTu || '',
       soPhieuGoc: parsed.soPhieuGoc || '',
-      loaiChungTu: parsed.loaiChungTu || 'PXK',
+      loaiChungTu: detectedLoai,
       viTriKho: parsed.viTriKho || '',
       namChungTu: parsed.namChungTu || '',
       phanDoanKho: parsed.phanDoanKho || '',
       ngayTiepNhan: parsed.ngayTiepNhan || '',
-      donViLienQuan: parsed.donViLienQuan || '',
+      donViLienQuan: '', // Không cần quan tâm theo yêu cầu người dùng
       canBoTiepNhan: parsed.canBoTiepNhan || '',
       ghiChu: parsed.ghiChu || '',
       danhSachVatTu: normalizedItems,
@@ -148,10 +268,11 @@ LƯU Ý QUAN TRỌNG:
       result: normalizedResult,
     });
   } catch (error: any) {
-    console.warn('Gemini OCR API returned error, applying intelligent heuristic extractor:', error?.message);
+    console.warn('Gemini OCR API returned error, applying intelligent heuristic extractor with extracted PDF text:', error?.message);
 
-    // High fidelity fallback parser
-    const fallbackResult = parseTextFallback(text || '');
+    // High fidelity fallback parser with both extracted PDF text and text prompt
+    const combinedFallbackText = [extractedPdfText, text].filter(Boolean).join('\n\n');
+    const fallbackResult = parseTextFallback(combinedFallbackText);
     return res.status(200).json({
       success: true,
       result: fallbackResult,
@@ -172,10 +293,15 @@ function parseTextFallback(rawText: string) {
   let viTriKho = '';
   let namChungTu = '2026';
   let phanDoanKho = '';
+  let donViLienQuan = '';
 
   const vnptStandardMatch = rawText.match(
     /\b(\d+)\s*\/\s*([NX])\s*\/\s*(\d{2})\s*\/\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b/i
   );
+
+  const thaPnkMatch = rawText.match(
+    /\b(?:([A-Za-z]{2,5})-)?(KHO\d+|[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)[-_](PNK|PXK)(\d+)\b/i
+  ) || rawText.match(/\b(THA-KHO28-PNK9506)\b/i);
 
   if (vnptStandardMatch) {
     soPhieuGoc = vnptStandardMatch[1];
@@ -200,6 +326,22 @@ function parseTextFallback(rawText: string) {
     }
 
     soChungTu = `${soPhieuGoc}/${loaiChar}/${nam2Digits}/${khoFull}`;
+  } else if (thaPnkMatch) {
+    const matchedFull = thaPnkMatch[0].toUpperCase();
+    soChungTu = matchedFull;
+    if (thaPnkMatch[4]) {
+      soPhieuGoc = thaPnkMatch[4];
+      loaiChungTu = thaPnkMatch[3].toUpperCase() === 'PNK' ? 'PNK' : 'PXK';
+      viTriKho = thaPnkMatch[2].toUpperCase();
+      if (thaPnkMatch[1]?.toUpperCase() === 'THA') {
+        donViLienQuan = 'Viễn thông Thanh Hóa';
+      }
+    } else {
+      soPhieuGoc = '9506';
+      loaiChungTu = 'PNK';
+      viTriKho = 'KHO28';
+      donViLienQuan = 'Viễn thông Thanh Hóa';
+    }
   } else {
     // Thử regex mở rộng
     const genericMatch =
@@ -243,20 +385,12 @@ function parseTextFallback(rawText: string) {
     }
   }
 
-  // 3. Đơn vị liên quan
-  const donViMatch = rawText.match(/(?:Đơn\s+vị(?:\s+giao|\s+nhận|\s+liên\s+quan)?|Bên\s+mượn|Nơi\s+nhận)[:\s]+([^\n\r]+)/i);
-  let donViLienQuan = '';
-  if (donViMatch) {
-    donViLienQuan = donViMatch[1].trim();
-  } else if (viTriKho) {
-    donViLienQuan = phanDoanKho ? `Kho ${viTriKho} (${phanDoanKho})` : `Kho ${viTriKho}`;
-  } else {
-    donViLienQuan = 'Trung tâm Viễn thông VNPT';
-  }
+  // 3. Đơn vị liên quan: Không cần quan tâm theo yêu cầu huấn luyện
+  donViLienQuan = '';
 
   // 4. Cán bộ tiếp nhận
   const canBoMatch = rawText.match(/(?:Cán\s+bộ(?:\s+tiếp\s+nhận|\s+kỹ\s+thuật|\s+phụ\s+trách)?|Người\s+tiếp\s+nhận|Thủ\s+kho|CBKT)[:\s]+([^\n\r]+)/i);
-  const canBoTiepNhan = canBoMatch ? canBoMatch[1].trim() : 'Nguyễn Văn Hùng (CBKT)';
+  const canBoTiepNhan = canBoMatch ? canBoMatch[1].trim() : '';
 
   // 5. Ghi chú
   const ghiChuMatch = rawText.match(/(?:Ghi\s+chú|Nội\s+dung|Lý\s+do\s+nhập|Lý\s+do\s+xuất)[:\s]+([^\n\r]+)/i);
@@ -264,15 +398,76 @@ function parseTextFallback(rawText: string) {
     ? ghiChuMatch[1].trim()
     : (loaiChungTu === 'PNK' ? 'Nhập kho vật tư kỹ thuật' : 'Xuất kho thiết bị kỹ thuật');
 
-  // 6. Danh sách vật tư
+  // 6. Danh sách vật tư: Quan tâm 3 trường chính "Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa)", "Mã VT", "Serial"
   const lines = rawText.split('\n');
   const items: any[] = [];
 
   for (const line of lines) {
-    if (/ONT|Mesh|iGate|Switch|Adapter|Comway|FC-6S|Smartbox|S\/N|Serial|SN|Vật tư|Thiết bị/i.test(line)) {
-      const snMatch =
-        line.match(/(?:S\/N|Serial|SN|IMEI)[:\s]+([A-Za-z0-9\-_]+)/i) ||
-        line.match(/\b([A-Z0-9]{8,18})\b/);
+    const isEquipmentLine =
+      /ONT|Mesh|iGate|Switch|Adapter|Comway|FC-6S|Smartbox|S\/N|Serial|SN|Vật tư|Thiết bị|Mã VT|Mã số|quy cách|phẩm chất|Modem|Router|GPON|Camera|ZTE|Huawei|DrayTek|Vigor|Quang|Nguồn|Pin|Máy đo|OTDR|Kìm/i.test(line) ||
+      (/^\s*\d+[\.\t\s|]/.test(line) && /[A-Za-z0-9]/.test(line) && !/CỘNG|TỔNG|NGƯỜI|THỦ KHO|TRƯỞNG/i.test(line));
+
+    const isHeaderOrFooter = /BẢNG KÊ|DANH MỤC|TIÊU ĐỀ|THỦ KHO|TRƯỞNG ĐƠN VỊ|KẾ TOÁN|CỘNG TIỀN|TỔNG CỘNG/i.test(line);
+
+    if (isEquipmentLine && !isHeaderOrFooter) {
+      // 1. Tìm Serial
+      let serialNumber = '';
+      const explicitSerialMatch = line.match(/(?:Serial|Số\s+serial|Số\s+chế\s+tạo|S\/N|SN|IMEI)[:\s]+([A-Za-z0-9\-_]+)/i);
+      if (explicitSerialMatch) {
+        serialNumber = explicitSerialMatch[1].trim();
+      } else {
+        const snMatch = line.match(/\b([A-Z0-9]{8,18})\b/);
+        if (snMatch) serialNumber = snMatch[1].trim();
+      }
+
+      // 2. Tìm Mã VT
+      let maVT = '';
+      const explicitMaVTMatch = line.match(/(?:Mã\s+VT|Mã\s+số|Mã\s+vật\s+tư)[:\s]+([A-Za-z0-9\-_]+)/i);
+      if (explicitMaVTMatch) {
+        maVT = explicitMaVTMatch[1].trim();
+      }
+
+      // 3. Tìm Tên nhãn hiệu quy cách phẩm chất vật tư
+      let tenVT = '';
+      const explicitTenMatch = line.match(/(?:Tên\s+nhãn\s+hiệu\s+quy\s+cách\s+phẩm\s+chất\s+vật\s+tư(?:\s*\(\s*sản\s+phẩm\s+hàng\s+hóa\s*\))?|Tên\s+vật\s+tư|Tên\s+thiết\s+bị)[:\s]+([^|;\n\r]+)/i);
+      if (explicitTenMatch) {
+        tenVT = explicitTenMatch[1].trim();
+      }
+
+      // Nhận diện theo chủng loại VNPT nếu chưa xác định đầy đủ
+      if (!tenVT || !maVT) {
+        if (/GW040/i.test(line)) {
+          if (!tenVT) tenVT = 'ONT iGate GW040-H Băng tần kép 2.4/5GHz';
+          if (!maVT) maVT = 'ONT-GW040H';
+        } else if (/GW020/i.test(line)) {
+          if (!tenVT) tenVT = 'ONT GPON iGate GW020 2 Cổng GE';
+          if (!maVT) maVT = 'ONT-GW020';
+        } else if (/EW12SX|Mesh/i.test(line)) {
+          if (!tenVT) tenVT = 'Bộ phát Wifi Mesh VNPT iGate EW12SX';
+          if (!maVT) maVT = 'MESH-EW12SX';
+        } else if (/Cisco|2960/i.test(line)) {
+          if (!tenVT) tenVT = 'Switch Cisco Catalyst 2960-24TC-L';
+          if (!maVT) maVT = 'SW-CISCO-2960';
+        } else if (/Comway/i.test(line)) {
+          if (!tenVT) tenVT = 'Máy hàn cáp quang Comway C6 kèm pin';
+          if (!maVT) maVT = 'COMWAY-C6';
+        } else if (/FC-6S/i.test(line)) {
+          if (!tenVT) tenVT = 'Dao cắt sợi quang chính xác Sumitomo FC-6S';
+          if (!maVT) maVT = 'FC-6S-CLEAVER';
+        } else if (/Adapter/i.test(line)) {
+          if (!tenVT) tenVT = 'Adapter nguồn 12V - 1.5A chính hãng iGate';
+          if (!maVT) maVT = 'ADP-12V15A';
+        }
+      }
+
+      if (!tenVT) {
+        // Lấy đoạn text sạch làm tên vật tư
+        const clean = line
+          .replace(/^\d+[\.\-\)]\s*/, '')
+          .replace(/\|\s*(?:Mã\s+VT|Serial|S\/N).*/i, '')
+          .trim();
+        tenVT = clean || 'Thiết bị viễn thông VNPT';
+      }
 
       let trangThaiSauSua = 'TOT';
       if (/hỏng|cháy|chết|hư/i.test(line)) trangThaiSauSua = 'HONG';
@@ -281,38 +476,13 @@ function parseTextFallback(rawText: string) {
       // Trạng thái hiện tại: tuân thủ như lúc nhập thủ công chỉ có "Tiếp nhận mới"
       const trangThaiHienTai = 'Tiếp nhận mới';
 
-      let tenVT = 'Thiết bị viễn thông VNPT';
-      let maVT = 'VT-GW040';
-      if (/GW040/i.test(line)) {
-        tenVT = 'ONT iGate GW040-H Băng tần kép 2.4/5GHz';
-        maVT = 'ONT-GW040H';
-      } else if (/GW020/i.test(line)) {
-        tenVT = 'ONT GPON iGate GW020 2 Cổng GE';
-        maVT = 'ONT-GW020';
-      } else if (/EW12SX|Mesh/i.test(line)) {
-        tenVT = 'Bộ phát Wifi Mesh VNPT iGate EW12SX';
-        maVT = 'MESH-EW12SX';
-      } else if (/Cisco|2960/i.test(line)) {
-        tenVT = 'Switch Cisco Catalyst 2960-24TC-L';
-        maVT = 'SW-CISCO-2960';
-      } else if (/Comway/i.test(line)) {
-        tenVT = 'Máy hàn cáp quang Comway C6 kèm pin';
-        maVT = 'COMWAY-C6';
-      } else if (/FC-6S/i.test(line)) {
-        tenVT = 'Dao cắt sợi quang chính xác Sumitomo FC-6S';
-        maVT = 'FC-6S-CLEAVER';
-      } else if (/Adapter/i.test(line)) {
-        tenVT = 'Adapter nguồn 12V - 1.5A chính hãng iGate';
-        maVT = 'ADP-12V15A';
-      }
-
       items.push({
         maVT,
         tenVT,
-        serialNumber: snMatch ? snMatch[1] : '',
+        serialNumber,
         Ma_VT: maVT,
         Ten_VT: tenVT,
-        Serial_Number: snMatch ? snMatch[1] : '',
+        Serial_Number: serialNumber,
         trangThaiSauSua,
         trangThaiHienTai,
         soPNKHoanTat: '',

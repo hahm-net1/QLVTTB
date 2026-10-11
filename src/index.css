@@ -1,1 +1,44 @@
 @import "tailwindcss";
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+  
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ẩn tất cả các phần tử không liên quan và nút bấm */
+  nav, header, footer, .print-hide, .print\:hidden {
+    display: none !important;
+  }
+
+  /* Khi in trực tiếp từ trình duyệt, bản in chiếm trọn trang giấy */
+  #printable-voucher-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  #printable-voucher-document table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  /* Đảm bảo bảng không bị cắt ngang dòng khi ngắt trang */
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}

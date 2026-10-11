@@ -45,15 +45,13 @@ PHIẾU NHẬP KHO VẬT TƯ THIẾT BỊ
 Số: 9325/N/26/KTTC-C1-KH04
 Ngày 09 tháng 10 năm 2026
 Vị trí kho: KTTC-C1 | Phân đoạn kho: KH04
-Đơn vị giao: Đội Điều hành Viễn thông Khu vực 1
-Cán bộ kỹ thuật tiếp nhận: Nguyễn Văn Hùng
 Lý do nhập kho: Nhập thu hồi thiết bị sau sửa chữa & kiểm thử định kỳ
 
-BẢNG KÊ THIẾT BỊ VẬT TƯ NHẬP KHO:
-1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | S/N: VNPT26H932501 | Trạng thái: Tiếp nhận mới
-2. Bộ phát Wifi Mesh iGate EW12SX | Mã VT: MESH-EW12SX | S/N: MESH26E932502 | Trạng thái: Tiếp nhận mới
-3. ONT GPON iGate GW020 2 Cổng | Mã VT: ONT-GW020 | S/N: GW020VN26932503 | Trạng thái: Tiếp nhận mới
-4. Switch Cisco Catalyst 2960-24TC-L | Mã VT: SW-CISCO-2960 | S/N: FCW2618L932504 | Trạng thái: Tiếp nhận mới`,
+BẢNG KÊ DANH MỤC THIẾT BỊ VẬT TƯ:
+1. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | Serial: VNPT26H932501 | Trạng thái: Tiếp nhận mới
+2. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): Bộ phát Wifi Mesh iGate EW12SX | Mã VT: MESH-EW12SX | Serial: MESH26E932502 | Trạng thái: Tiếp nhận mới
+3. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): ONT GPON iGate GW020 2 Cổng | Mã VT: ONT-GW020 | Serial: GW020VN26932503 | Trạng thái: Tiếp nhận mới
+4. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): Switch Cisco Catalyst 2960-24TC-L | Mã VT: SW-CISCO-2960 | Serial: FCW2618L932504 | Trạng thái: Tiếp nhận mới`,
   },
   {
     name: 'Mẫu 2: Phiếu xuất kho (PXK chuẩn: 14853/X/26/KTTC-C1-KH01)',
@@ -65,13 +63,29 @@ PHIẾU XUẤT KHO THIẾT BỊ ĐIỀU PHỐI
 Số: 14853/X/26/KTTC-C1-KH01
 Ngày 10 tháng 10 năm 2026
 Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
-Đơn vị nhận: Trung tâm Viễn thông Địa bàn 2
-Người nhận bàn giao: Trần Anh Tuấn
 Ghi chú: Xuất điều phối vật tư thiết bị mạng cho tổ ứng cứu khẩn cấp
 
 BẢNG KÊ DANH MỤC THIẾT BỊ XUẤT KHO:
-1. ONT iGate GW040-H Băng tần kép 2.4/5GHz | S/N: VNPT26X148531 | Trạng thái: Tiếp nhận mới
-2. Bộ phát Wifi Mesh iGate EW12SX AC1200 | S/N: MESH26X148532 | Trạng thái: Tiếp nhận mới
-3. Adapter nguồn 12V - 1.5A chính hãng iGate | S/N: ADP26X148533 | Trạng thái: Tiếp nhận mới`,
+1. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | Serial: VNPT26X148531 | Trạng thái: Tiếp nhận mới
+2. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): Bộ phát Wifi Mesh iGate EW12SX AC1200 | Mã VT: MESH-EW12SX | Serial: MESH26X148532 | Trạng thái: Tiếp nhận mới
+3. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): Adapter nguồn 12V - 1.5A chính hãng iGate | Mã VT: ADP-12V15A | Serial: ADP26X148533 | Trạng thái: Tiếp nhận mới`,
+  },
+  {
+    name: 'Mẫu 3: Phiếu nhập kho (PNK chuẩn: THA-KHO28-PNK9506)',
+    type: 'PNK',
+    soChungTu: 'THA-KHO28-PNK9506',
+    text: `TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM
+VIỄN THÔNG THANH HÓA - KHO 28
+PHIẾU NHẬP KHO THIẾT BỊ VẬT TƯ
+Số: THA-KHO28-PNK9506
+Ngày 10 tháng 10 năm 2026
+Kho: KHO28
+Lý do nhập kho: Nhập kho thiết bị thu hồi và vật tư dự phòng kỹ thuật
+
+BẢNG KÊ DANH MỤC THIẾT BỊ VẬT TƯ NHẬP KHO:
+1. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): ONT iGate GW040-H Băng tần kép 2.4/5GHz | Mã VT: ONT-GW040H | Serial: VNPT26H950601 | Trạng thái: Tiếp nhận mới
+2. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): Bộ phát Wifi Mesh iGate EW12SX AC1200 | Mã VT: MESH-EW12SX | Serial: MESH26E950602 | Trạng thái: Tiếp nhận mới
+3. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): ONT GPON iGate GW020 2 Cổng GE | Mã VT: ONT-GW020 | Serial: GW020VN26950603 | Trạng thái: Tiếp nhận mới
+4. Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa): Switch Cisco Catalyst 2960-24TC-L | Mã VT: SW-CISCO-2960 | Serial: FCW2618L950604 | Trạng thái: Tiếp nhận mới`,
   },
 ];

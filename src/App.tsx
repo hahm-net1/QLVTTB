@@ -41,6 +41,7 @@ export default function App() {
   const [editingVoucher, setEditingVoucher] = useState<PhieuGiaoDich | null>(null);
   const [detailVoucher, setDetailVoucher] = useState<PhieuGiaoDich | null>(null);
   const [isSmartScanOpen, setIsSmartScanOpen] = useState(false);
+  const [scanSessionKey, setScanSessionKey] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Load vouchers from local cache and subscribe to Firestore realtime updates
@@ -76,10 +77,14 @@ export default function App() {
 
   const handleNewVoucher = () => {
     setEditingVoucher(null);
+    setScanSessionKey((prev) => prev + 1);
     setActiveTab('form');
   };
 
   const handleSaveVoucher = async (savedVoucher: PhieuGiaoDich) => {
+    // Reset toàn bộ phiên quét và upload trước đó khi lưu chứng từ
+    setScanSessionKey((prev) => prev + 1);
+
     // Optimistic local update
     const updated = saveOrUpdateVoucher(savedVoucher);
     setVouchers(updated);
@@ -152,6 +157,7 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
 
+    setScanSessionKey((prev) => prev + 1);
     setEditingVoucher(newVoucher);
     setActiveTab('form');
     showToast('Đã nạp dữ liệu trích xuất AI vào form!');
@@ -319,6 +325,7 @@ export default function App() {
 
       {/* AI OCR Smart Scan Modal */}
       <SmartScanModal
+        key={scanSessionKey}
         isOpen={isSmartScanOpen}
         onClose={() => setIsSmartScanOpen(false)}
         onApplyData={handleApplySmartScanData}

@@ -66,10 +66,11 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onNewVoucher}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold text-xs sm:text-sm px-3 py-2 rounded-lg transition-colors shadow-sm cursor-pointer"
+            title="Tạo yêu cầu mới / Lập chứng từ mới"
           >
             <PlusCircle className="w-4 h-4" />
-            <span className="hidden sm:inline">Lập phiếu mới</span>
-            <span className="sm:hidden">Phiếu mới</span>
+            <span className="hidden sm:inline">Tạo yêu cầu mới</span>
+            <span className="sm:hidden">Tạo mới</span>
           </button>
 
           {/* Export CSV */}
