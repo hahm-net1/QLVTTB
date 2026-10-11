@@ -311,8 +311,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             Top chủng loại thiết bị xử lý nhiều nhất
           </h3>
           <span className="text-[11px] text-slate-500 font-medium">
-            Thống kê theo Mã VT & Tên VT
-          </span>
+             </span>
         </div>
 
         {topEquip.length === 0 ? (
