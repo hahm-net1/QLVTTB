@@ -36,7 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-black text-lg sm:text-xl leading-tight tracking-tight text-white">
-                QLVT-TB
+                QLVT
               </h1>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-400/20 text-cyan-200 border border-cyan-400/30">
                 <Cloud className="w-3 h-3 text-cyan-300 animate-pulse" />

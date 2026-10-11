@@ -306,18 +306,17 @@ export default function App() {
       <footer className="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-500 hidden sm:block">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-[#004b93]">QLVT-TB</span>
+            <span className="font-bold text-[#004b93]">QLVT</span>
             <span>•</span>
             <span>Hệ thống Quản lý Thiết bị, Vật tư & Sửa chữa</span>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-slate-400">
-            <span>Hệ thống Quản lý</span>
-            <span>Tối ưu Mobile-first</span>
+            <span>XVT-Hahm</span>
             <button
               onClick={handleResetSampleData}
               className="text-[#004b93] hover:underline cursor-pointer"
             >
-              Nạp lại mẫu thử
+        
             </button>
           </div>
         </div>

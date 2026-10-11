@@ -526,7 +526,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
               <div className="border-b border-slate-300 pb-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="space-y-0.5">
                   <h1 className="text-xs sm:text-sm font-bold uppercase tracking-tight text-slate-900">
-                    HỆ THỐNG QUẢN LÝ VẬT TƯ & THIẾT BỊ (QLVT-TB)
+                    HỆ THỐNG QUẢN LÝ VẬT TƯ & THIẾT BỊ
                   </h1>
                   <p className="text-[11px] text-slate-500 font-medium">
                     BỘ PHẬN ĐIỀU PHỐI, KIỂM KÊ & SỬA CHỮA THIẾT BỊ
