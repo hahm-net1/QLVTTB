@@ -59,14 +59,42 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const countPNK = vouchers.filter((v) => v.loaiChungTu === 'PNK').length;
   const countGM = vouchers.filter((v) => v.loaiChungTu === 'GUI_MUON').length;
 
-  // Top equipment types
-  const equipCountMap: Record<string, number> = {};
+  // Top equipment types (Mã VT & Tên VT)
+  interface EquipStat {
+    maVT: string;
+    tenVT: string;
+    count: number;
+    countTot: number;
+    countHong: number;
+  }
+  const equipMap: Record<string, EquipStat> = {};
   allItems.forEach((item) => {
-    const key = item.maVT || item.tenVT.slice(0, 20);
-    equipCountMap[key] = (equipCountMap[key] || 0) + 1;
+    const ma = item.maVT?.trim() || '';
+    const ten = item.tenVT?.trim() || '';
+    const key = ma || ten || 'Chưa xác định';
+    if (!equipMap[key]) {
+      equipMap[key] = {
+        maVT: ma || 'N/A',
+        tenVT: ten || 'Chưa đặt tên vật tư',
+        count: 0,
+        countTot: 0,
+        countHong: 0,
+      };
+    } else {
+      if ((!equipMap[key].tenVT || equipMap[key].tenVT === 'Chưa đặt tên vật tư') && ten) {
+        equipMap[key].tenVT = ten;
+      }
+      if ((equipMap[key].maVT === 'N/A' || !equipMap[key].maVT) && ma) {
+        equipMap[key].maVT = ma;
+      }
+    }
+    equipMap[key].count += 1;
+    if (item.trangThaiHienTai === 'NK tốt') equipMap[key].countTot += 1;
+    if (item.trangThaiHienTai === 'NK hỏng') equipMap[key].countHong += 1;
   });
-  const topEquip = Object.entries(equipCountMap)
-    .sort((a, b) => b[1] - a[1])
+
+  const topEquip = Object.values(equipMap)
+    .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
   return (
@@ -277,29 +305,72 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
       {/* Top 5 Most Processed Equipment */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-        <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-          <Layers className="w-4 h-4 text-[#004b93]" />
-          Top chủng loại thiết bị xử lý nhiều nhất
-        </h3>
-
-        <div className="space-y-2">
-          {topEquip.map(([name, count], index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-[#004b93]/10 text-[#004b93] font-bold flex items-center justify-center text-[10px]">
-                  {index + 1}
-                </span>
-                <span className="font-semibold text-slate-800 font-mono">{name}</span>
-              </div>
-              <span className="font-bold text-[#004b93] bg-white px-2.5 py-1 rounded-lg border border-slate-200">
-                {count} thiết bị
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#004b93]" />
+            Top chủng loại thiết bị xử lý nhiều nhất
+          </h3>
+          <span className="text-[11px] text-slate-500 font-medium">
+            Thống kê theo Mã VT & Tên VT
+          </span>
         </div>
+
+        {topEquip.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-400">
+            Chưa có dữ liệu thiết bị nào trong hệ thống.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {topEquip.map((item, index) => {
+              const pctOfTotal = totalItems > 0 ? Math.round((item.count / totalItems) * 100) : 0;
+              return (
+                <div
+                  key={index}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100/70 border border-slate-200/80 transition-colors gap-2.5 text-xs"
+                >
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                    <span className={`w-5 h-5 rounded-full font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5 sm:mt-0 ${
+                      index === 0
+                        ? 'bg-amber-100 text-amber-800 font-extrabold'
+                        : index === 1
+                        ? 'bg-slate-200 text-slate-800'
+                        : index === 2
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-blue-100/70 text-[#004b93]'
+                    }`}>
+                      {index + 1}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        {item.maVT && item.maVT !== 'N/A' && (
+                          <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                            {item.maVT}
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-slate-500 font-medium shrink-0">Tên VT:</span>
+                          <span className="font-semibold text-slate-800 truncate" title={item.tenVT}>
+                            {item.tenVT}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center pl-7 sm:pl-0">
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      ({pctOfTotal}%)
+                    </span>
+                    <span className="font-bold text-[#004b93] bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs whitespace-nowrap">
+                      {item.count} thiết bị
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
