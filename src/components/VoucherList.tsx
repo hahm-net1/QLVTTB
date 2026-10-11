@@ -63,9 +63,10 @@ export const VoucherList: React.FC<VoucherListProps> = ({
 
       // Status filter
       if (selectedStatus !== 'ALL') {
-        const hasStatus = v.danhSachVatTu.some((item) =>
-          item.trangThaiHienTai.toLowerCase().includes(selectedStatus.toLowerCase())
-        );
+        const hasStatus = v.danhSachVatTu.some((item) => {
+          const itemStatus = item.trangThaiHienTai || 'Tiếp nhận mới';
+          return itemStatus.toLowerCase().includes(selectedStatus.toLowerCase());
+        });
         if (!hasStatus) return false;
       }
 
@@ -307,8 +308,8 @@ export const VoucherList: React.FC<VoucherListProps> = ({
                     {(() => {
                       const nTot = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'NK tốt').length;
                       const nHong = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'NK hỏng').length;
-                      const nKTT = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'Kiểm tra thêm').length;
-                      const nMoi = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'Tiếp nhận mới').length;
+                      const nKTT = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa').length;
+                      const nMoi = voucher.danhSachVatTu.filter((i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới').length;
 
                       return (
                         <div className="flex flex-wrap items-center gap-1">
@@ -327,9 +328,9 @@ export const VoucherList: React.FC<VoucherListProps> = ({
                               Kiểm tra thêm: {nKTT}
                             </span>
                           )}
-                          {nMoi > 0 && nTot === 0 && nHong === 0 && nKTT === 0 && (
+                          {nMoi > 0 && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                              Tiếp nhận mới
+                              {nTot === 0 && nHong === 0 && nKTT === 0 ? 'Tiếp nhận mới' : `Tiếp nhận mới: ${nMoi}`}
                             </span>
                           )}
                           {(() => {

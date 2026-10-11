@@ -34,19 +34,19 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const totalItems = allItems.length;
 
   const countNKTot = allItems.filter(
-    (i) => i.trangThaiHienTai === 'NK tốt' || (i.trangThaiSauSua === 'TOT' && i.trangThaiHienTai !== 'NK hỏng' && i.trangThaiHienTai !== 'Kiểm tra thêm')
+    (i) => i.trangThaiHienTai === 'NK tốt'
   ).length;
 
   const countNKHong = allItems.filter(
-    (i) => i.trangThaiHienTai === 'NK hỏng' || (i.trangThaiSauSua === 'HONG' && i.trangThaiHienTai !== 'NK tốt' && i.trangThaiHienTai !== 'Kiểm tra thêm')
+    (i) => i.trangThaiHienTai === 'NK hỏng'
   ).length;
 
   const countKTT = allItems.filter(
-    (i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa' || (i.trangThaiSauSua === 'LOI' && i.trangThaiHienTai !== 'NK tốt' && i.trangThaiHienTai !== 'NK hỏng')
+    (i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa'
   ).length;
 
   const countTiepNhanMoi = allItems.filter(
-    (i) => i.trangThaiHienTai === 'Tiếp nhận mới'
+    (i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới'
   ).length;
 
   const pctTot = totalItems > 0 ? Math.round((countNKTot / totalItems) * 100) : 0;
@@ -115,13 +115,13 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-cyan-50 text-[#00a3e0] flex items-center justify-center shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#004b93] flex items-center justify-center shrink-0">
             <Layers className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase">Tổng thiết bị</p>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800">{totalItems}</h3>
-            <p className="text-[10px] text-slate-500">Đã gắn mã & S/N</p>
+            <p className="text-[11px] font-bold text-slate-400 uppercase">Tiếp nhận mới</p>
+            <h3 className="text-xl sm:text-2xl font-black text-[#004b93]">{countTiepNhanMoi}</h3>
+            <p className="text-[10px] text-blue-700 font-semibold">{pctMoi}% (Chờ sửa chữa / {totalItems} TB)</p>
           </div>
         </div>
 
@@ -137,13 +137,13 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Wrench className="w-6 h-6" />
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <XCircle className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase">Kiểm tra thêm & Mới</p>
-            <h3 className="text-xl sm:text-2xl font-black text-amber-600">{countKTT + countTiepNhanMoi}</h3>
-            <p className="text-[10px] text-amber-700 font-semibold">{countKTT} kiểm tra, {countTiepNhanMoi} mới</p>
+            <p className="text-[11px] font-bold text-slate-400 uppercase">NK Hỏng & Cần KT</p>
+            <h3 className="text-xl sm:text-2xl font-black text-rose-600">{countNKHong + countKTT}</h3>
+            <p className="text-[10px] text-slate-500 font-semibold">{countNKHong} hỏng, {countKTT} kiểm tra thêm</p>
           </div>
         </div>
       </div>
@@ -154,10 +154,26 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-[#004b93]" />
-            Chất lượng sau sửa chữa
+            Tình trạng & Phân loại thiết bị
           </h3>
 
           <div className="space-y-3">
+            {/* Tiếp nhận mới */}
+            <div>
+              <div className="flex justify-between text-xs font-semibold mb-1">
+                <span className="text-blue-700 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-blue-500" /> Tiếp nhận mới (Chờ sửa chữa)
+                </span>
+                <span className="font-mono">{countTiepNhanMoi} ({pctMoi}%)</span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-blue-500 h-2.5 rounded-full transition-all"
+                  style={{ width: `${pctMoi}%` }}
+                />
+              </div>
+            </div>
+
             {/* NK Tốt */}
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
@@ -205,24 +221,6 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                 />
               </div>
             </div>
-
-            {/* Tiếp nhận mới */}
-            {countTiepNhanMoi > 0 && (
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-1">
-                  <span className="text-blue-700 flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-blue-500" /> Tiếp nhận mới (Chờ sửa chữa)
-                  </span>
-                  <span className="font-mono">{countTiepNhanMoi} ({pctMoi}%)</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-blue-500 h-2.5 rounded-full transition-all"
-                    style={{ width: `${pctMoi}%` }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -234,14 +232,20 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
           </h3>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+              <Layers className="w-4 h-4 text-blue-600 mx-auto mb-1" />
+              <p className="text-base font-black text-blue-700">{countTiepNhanMoi}</p>
+              <p className="text-[10px] text-blue-800 font-bold">Tiếp nhận mới</p>
+            </div>
+
             <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
-              <PackageCheck className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
               <p className="text-base font-black text-emerald-700">{countNKTot}</p>
               <p className="text-[10px] text-emerald-800 font-bold">NK tốt</p>
             </div>
 
             <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-              <Wrench className="w-4 h-4 text-amber-600 mx-auto mb-1" />
+              <AlertTriangle className="w-4 h-4 text-amber-600 mx-auto mb-1" />
               <p className="text-base font-black text-amber-700">{countKTT}</p>
               <p className="text-[10px] text-amber-800 font-bold">Kiểm tra thêm</p>
             </div>
@@ -250,12 +254,6 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               <XCircle className="w-4 h-4 text-rose-600 mx-auto mb-1" />
               <p className="text-base font-black text-rose-700">{countNKHong}</p>
               <p className="text-[10px] text-rose-800 font-bold">NK hỏng</p>
-            </div>
-
-            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
-              <Send className="w-4 h-4 text-blue-600 mx-auto mb-1" />
-              <p className="text-base font-black text-blue-700">{countTiepNhanMoi}</p>
-              <p className="text-[10px] text-blue-800 font-bold">Tiếp nhận mới</p>
             </div>
           </div>
 

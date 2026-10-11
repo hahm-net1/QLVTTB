@@ -103,10 +103,11 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
     const trimmedPNK = pnkInput.trim();
     const updatedItems = (voucher.danhSachVatTu || []).map((it) => {
       let isEligible = false;
+      const curStatus = it.trangThaiHienTai || 'Tiếp nhận mới';
       if (pnkScope === 'TOT') {
-        isEligible = it.trangThaiSauSua === 'TOT' || it.trangThaiHienTai === 'NK tốt';
+        isEligible = curStatus === 'NK tốt' || (it.trangThaiSauSua === 'TOT' && curStatus !== 'Tiếp nhận mới' && curStatus !== 'NK hỏng');
       } else if (pnkScope === 'HONG') {
-        isEligible = it.trangThaiSauSua === 'HONG' || it.trangThaiHienTai === 'NK hỏng';
+        isEligible = curStatus === 'NK hỏng' || (it.trangThaiSauSua === 'HONG' && curStatus !== 'Tiếp nhận mới' && curStatus !== 'NK tốt');
       } else if (pnkScope === 'ALL') {
         isEligible = true;
       }
@@ -116,7 +117,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
           ...it,
           soPNKHoanTat: trimmedPNK,
           trangThaiHienTai:
-            it.trangThaiSauSua === 'HONG' || it.trangThaiHienTai === 'NK hỏng'
+            curStatus === 'NK hỏng' || (it.trangThaiSauSua === 'HONG' && curStatus !== 'NK tốt')
               ? 'NK hỏng'
               : 'NK tốt',
         };
@@ -830,8 +831,10 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
 
               <div className="space-y-3.5 text-xs">
                 {(() => {
-                  const countTot = voucher.danhSachVatTu.filter((i) => i.trangThaiSauSua === 'TOT' || i.trangThaiHienTai === 'NK tốt').length;
-                  const countHong = voucher.danhSachVatTu.filter((i) => i.trangThaiSauSua === 'HONG' || i.trangThaiHienTai === 'NK hỏng').length;
+                  const countTot = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'NK tốt').length;
+                  const countHong = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'NK hỏng').length;
+                  const countKTT = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa').length;
+                  const countMoi = voucher.danhSachVatTu.filter((i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới').length;
                   const countAll = voucher.danhSachVatTu.length;
 
                   return (
@@ -853,6 +856,18 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                           <span className="text-slate-500">Thiết bị HỎNG (NK hỏng):</span>
                           <span className="font-bold text-rose-600">{countHong} thiết bị</span>
                         </div>
+                        {countKTT > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Kiểm tra thêm:</span>
+                            <span className="font-bold text-amber-600">{countKTT} thiết bị</span>
+                          </div>
+                        )}
+                        {countMoi > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Tiếp nhận mới (chưa sửa):</span>
+                            <span className="font-bold text-blue-600">{countMoi} thiết bị</span>
+                          </div>
+                        )}
                       </div>
 
                       <div>
