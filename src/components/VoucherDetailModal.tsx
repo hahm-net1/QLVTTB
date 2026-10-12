@@ -410,8 +410,16 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
 
   const handleOpenUpdateStatus = () => {
     if (isBBBG) return;
-    const preparedItems = (voucher.danhSachVatTu || []).map((it) => {
-      const sauSua = it.trangThaiSauSua || 'TOT';
+    const rawItems = voucher.danhSachVatTu || [];
+    // Kiểm tra nếu tất cả vật tư đều đang ở trạng thái tiếp nhận mới (hoặc chưa có trạng thái)
+    const isAllNewlyReceived =
+      rawItems.length > 0 &&
+      rawItems.every((it) => !it.trangThaiHienTai || it.trangThaiHienTai === 'Tiếp nhận mới');
+
+    const preparedItems = rawItems.map((it) => {
+      // Đối với phiếu mới khởi tạo mà tất cả vật tư đều đang ở trạng thái tiếp nhận mới
+      // thì khi click "cập nhật sau sửa chữa" lần đầu tiên thì "trạng thái sau sửa chữa" của các vật tư đều là "Lỗi"
+      const sauSua = isAllNewlyReceived ? 'LOI' : (it.trangThaiSauSua || 'TOT');
       let hienTai = it.trangThaiHienTai;
       if (!hienTai || hienTai === 'Tiếp nhận mới' || hienTai === 'Đang sửa chữa') {
         if (sauSua === 'TOT') hienTai = 'NK tốt';
