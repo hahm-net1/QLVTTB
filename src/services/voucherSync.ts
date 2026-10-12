@@ -64,6 +64,25 @@ export async function saveVoucherToCloud(voucher: PhieuGiaoDich): Promise<void> 
 }
 
 /**
+ * Save or update multiple vouchers in Firestore simultaneously.
+ */
+export async function saveMultipleVouchersToCloud(vouchers: PhieuGiaoDich[]): Promise<void> {
+  if (!vouchers || vouchers.length === 0) return;
+  const batch = writeBatch(db);
+  const now = new Date().toISOString();
+  vouchers.forEach((v) => {
+    const docRef = doc(db, COLLECTION_NAME, v.id);
+    const payload: PhieuGiaoDich = {
+      ...v,
+      updatedAt: now,
+      createdAt: v.createdAt || now,
+    };
+    batch.set(docRef, payload, { merge: true });
+  });
+  await batch.commit();
+}
+
+/**
  * Delete a voucher from Firestore.
  */
 export async function deleteVoucherFromCloud(id: string): Promise<void> {

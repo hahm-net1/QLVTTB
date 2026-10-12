@@ -28,6 +28,7 @@ export const DON_VI_GOI_Y = [
 export const TRANG_THAI_HIEN_TAI_OPTIONS = [
   'Tiếp nhận mới',
   'Tạm nhận',
+  'Đã gán',
   'NK tốt',
   'NK hỏng',
   'Kiểm tra thêm',

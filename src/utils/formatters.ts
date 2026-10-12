@@ -111,6 +111,13 @@ export function getItemStatusBadge(status: string): { label: string; bg: string;
   }
 
   switch (status) {
+    case 'Đã gán':
+      return {
+        label: 'Đã gán',
+        bg: 'bg-indigo-100 text-indigo-800 font-bold',
+        text: 'text-indigo-800',
+        border: 'border-indigo-400',
+      };
     case 'Tạm nhận':
       return {
         label: 'Tạm nhận',

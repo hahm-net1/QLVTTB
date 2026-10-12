@@ -15,7 +15,10 @@ import {
   CheckSquare, 
   AlertTriangle, 
   Warehouse, 
-  Loader2 
+  Loader2,
+  Upload,
+  FileSpreadsheet,
+  MoreVertical
 } from 'lucide-react';
 import { PhieuGiaoDich, ChiTietVatTu, TrangThaiSauSua } from '../types';
 import { 
@@ -24,6 +27,10 @@ import {
   formatDateVN 
 } from '../utils/formatters';
 import { generateVoucherPDF } from '../utils/pdfGenerator';
+import { parseExcelDocument } from '../utils/excelParser';
+import { extractDocumentWithAI } from '../utils/ocrParser';
+import { exportSingleVoucherToCSV, saveOrUpdateMultipleVouchers } from '../utils/storage';
+import { isEquipmentMatched } from '../utils/equipmentMatcher';
 
 interface VoucherDetailModalProps {
   voucher: PhieuGiaoDich | null;
@@ -32,6 +39,7 @@ interface VoucherDetailModalProps {
   onEdit: (voucher: PhieuGiaoDich) => void;
   onDelete?: (id: string) => void;
   onUpdateVoucher?: (voucher: PhieuGiaoDich) => void;
+  onUpdateMultipleVouchers?: (vouchers: PhieuGiaoDich[]) => void;
 }
 
 export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
@@ -40,6 +48,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   onClose,
   onEdit,
   onUpdateVoucher,
+  onUpdateMultipleVouchers,
 }) => {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [items, setItems] = useState<ChiTietVatTu[]>([]);
@@ -56,13 +65,35 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   const [bbbgPnkInput, setBbbgPnkInput] = useState('');
   const [selectedBBBGItemIds, setSelectedBBBGItemIds] = useState<string[]>([]);
   const [bbbgFilterTab, setBbbgFilterTab] = useState<'ALL' | 'TAM_NHAN' | 'DA_GAN'>('TAM_NHAN');
+  const [isParsingPnkFile, setIsParsingPnkFile] = useState(false);
+  const [pnkFileNotice, setPnkFileNotice] = useState<string | null>(null);
+  const pnkFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Overflow Menu State (gộp In biên bản, Xuất CSV, Chỉnh sửa)
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (overflowMenuRef.current && !overflowMenuRef.current.contains(event.target as Node)) {
+        setShowOverflowMenu(false);
+      }
+    };
+    if (showOverflowMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showOverflowMenu]);
 
   useEffect(() => {
     if (voucher) {
       setItems(voucher.danhSachVatTu || []);
       setIsUpdatingStatus(false);
+      setShowOverflowMenu(false);
     }
   }, [voucher]);
 
@@ -81,40 +112,24 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
       (voucher.danhSachVatTu &&
         voucher.danhSachVatTu.length > 0 &&
         voucher.danhSachVatTu.every(
-          (it) => it.soPNKHoanTat && it.soPNKHoanTat.trim() !== '' && it.trangThaiHienTai !== 'Tạm nhận'
+          (it) => it.trangThaiHienTai === 'Đã gán' || (it.soPNKHoanTat && it.soPNKHoanTat.trim() !== '' && it.trangThaiHienTai !== 'Tạm nhận')
         )))
   );
 
   const totalBBBGItems = voucher.danhSachVatTu?.length || 0;
   const assignedBBBGItems = (voucher.danhSachVatTu || []).filter(
-    (i) => i.soPNKHoanTat && i.soPNKHoanTat.trim() !== '' && i.trangThaiHienTai !== 'Tạm nhận'
+    (i) => i.trangThaiHienTai === 'Đã gán' || (i.soPNKHoanTat && i.soPNKHoanTat.trim() !== '' && i.trangThaiHienTai !== 'Tạm nhận')
   ).length;
   const pendingBBBGItems = (voucher.danhSachVatTu || []).filter(
-    (i) => !i.soPNKHoanTat || i.trangThaiHienTai === 'Tạm nhận'
+    (i) => i.trangThaiHienTai === 'Tạm nhận' || !i.soPNKHoanTat
   ).length;
 
   const handleOpenBBBGModal = () => {
     if (!voucher) return;
-    // Mặc định chọn tất cả các vật tư còn đang "Tạm nhận" (chưa gán PNK)
-    const pendingIds = (voucher.danhSachVatTu || [])
-      .filter((it) => !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận')
-      .map((it) => it.id);
-    setSelectedBBBGItemIds(pendingIds);
-
-    // Gợi ý số PNK
-    const firstAssigned = (voucher.danhSachVatTu || []).find((it) => it.soPNKHoanTat)?.soPNKHoanTat;
-    const existingPNKs = (allVouchers || [])
-      .filter((v) => v.loaiChungTu === 'PNK' && v.soChungTu)
-      .map((v) => v.soChungTu);
-
-    if (firstAssigned) {
-      setBbbgPnkInput(firstAssigned);
-    } else if (existingPNKs.length > 0) {
-      setBbbgPnkInput(existingPNKs[0]);
-    } else {
-      setBbbgPnkInput('');
-    }
-
+    // Bắt đầu với mảng rỗng: người dùng tự tick chọn nhặt từng vật tư trước khi nhập số PNK
+    setSelectedBBBGItemIds([]);
+    setPnkFileNotice(null);
+    setBbbgPnkInput('');
     setBbbgFilterTab('TAM_NHAN');
     setShowBBBGModal(true);
   };
@@ -128,7 +143,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   const handleSelectAllPendingBBBG = () => {
     if (!voucher) return;
     const pendingIds = (voucher.danhSachVatTu || [])
-      .filter((it) => !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận')
+      .filter((it) => it.trangThaiHienTai === 'Tạm nhận' || !it.soPNKHoanTat)
       .map((it) => it.id);
     setSelectedBBBGItemIds(pendingIds);
   };
@@ -140,6 +155,70 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
 
   const handleDeselectAllBBBG = () => {
     setSelectedBBBGItemIds([]);
+  };
+
+  const handlePnkFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !voucher) return;
+
+    setIsParsingPnkFile(true);
+    setPnkFileNotice('Đang đọc tệp và trích xuất dữ liệu PNK...');
+
+    try {
+      const fileNameLower = file.name.toLowerCase();
+      let extractedSoCT = '';
+      let extractedItems: any[] = [];
+
+      if (fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls') || fileNameLower.endsWith('.csv')) {
+        const parsed = await parseExcelDocument(file);
+        extractedSoCT = parsed.soChungTu || '';
+        extractedItems = parsed.danhSachVatTu || [];
+      } else {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const promptText = `Trích xuất thông tin phiếu nhập kho (PNK) từ file: ${file.name}. Đọc số chứng từ PNK và danh mục Tên thiết bị/vật tư, Số Serial Number thiết bị.`;
+        const parsed = await extractDocumentWithAI(promptText, base64);
+        extractedSoCT = parsed.soChungTu || '';
+        extractedItems = parsed.danhSachVatTu || [];
+      }
+
+      if (extractedSoCT) {
+        setBbbgPnkInput(extractedSoCT);
+      }
+
+      // Quét toàn bộ vật tư có trên BBBG: nếu khớp Tên thiết bị/vật tư và số serial thì tự động tích chọn
+      const currentItems = voucher.danhSachVatTu || [];
+      const matchedIds: string[] = [];
+
+      currentItems.forEach((item) => {
+        const isMatched = extractedItems.some((fItem) => isEquipmentMatched(item, fItem));
+        if (isMatched) {
+          matchedIds.push(item.id);
+        }
+      });
+
+      if (matchedIds.length > 0) {
+        setSelectedBBBGItemIds(matchedIds);
+        setPnkFileNotice(
+          `Đã quét file PNK: Số PNK "${extractedSoCT || file.name}". Đã tự động khớp và tích chọn ${matchedIds.length}/${currentItems.length} vật tư (khớp Tên thiết bị & Số serial). Nhấn "Hoàn thành" để gán.`
+        );
+      } else {
+        setPnkFileNotice(
+          `Đã đọc file PNK "${extractedSoCT || file.name}" nhưng chưa tìm thấy vật tư nào khớp cả Tên thiết bị & Serial trên BBBG này. Bạn có thể tích chọn thủ công bên dưới.`
+        );
+      }
+    } catch (err: any) {
+      console.error('Lỗi phân tích file PNK:', err);
+      setPnkFileNotice('Lỗi khi đọc file PNK: ' + (err?.message || 'Không thể nhận diện'));
+    } finally {
+      setIsParsingPnkFile(false);
+      if (pnkFileInputRef.current) pnkFileInputRef.current.value = '';
+    }
   };
 
   const handleConfirmBBBGAssign = () => {
@@ -160,19 +239,21 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
         return {
           ...it,
           soPNKHoanTat: trimmedPNK,
-          trangThaiHienTai: trimmedPNK, // khi đã gán PNK chính là số PNK
+          trangThaiHienTai: 'Đã gán',
         };
       }
-      // Số vật tư còn lại chưa gán vẫn là trạng thái "Tạm nhận" cho đến khi được gán
+      // Những vật tư chưa được chọn: giữ nguyên trạng thái "Tạm nhận" và trường "Số PNK" rỗng
+      const isPreviouslyAssigned = it.trangThaiHienTai === 'Đã gán' && Boolean(it.soPNKHoanTat);
       return {
         ...it,
-        trangThaiHienTai: it.soPNKHoanTat ? it.soPNKHoanTat : 'Tạm nhận',
+        soPNKHoanTat: isPreviouslyAssigned ? it.soPNKHoanTat : '',
+        trangThaiHienTai: isPreviouslyAssigned ? 'Đã gán' : 'Tạm nhận',
       };
     });
 
     // BBBG sau khi hoàn thành gán PNK phần Ghi chú phiếu sẽ thêm dòng "Đã hoàn thành nhập kho đơn vị"
     const allAssigned = updatedItems.length > 0 && updatedItems.every(
-      (it) => it.soPNKHoanTat && it.soPNKHoanTat.trim() !== '' && it.trangThaiHienTai !== 'Tạm nhận'
+      (it) => it.trangThaiHienTai === 'Đã gán' && it.soPNKHoanTat && it.soPNKHoanTat.trim() !== ''
     );
 
     let newGhiChu = voucher.ghiChu || '';
@@ -181,6 +262,8 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
       if (!newGhiChu.includes(completedMsg)) {
         newGhiChu = newGhiChu.trim() ? `${newGhiChu.trim()}\n${completedMsg}` : completedMsg;
       }
+    } else {
+      newGhiChu = newGhiChu.replace(new RegExp(`\\n?${completedMsg}`, 'g'), '').trim();
     }
 
     const updatedVoucher: PhieuGiaoDich = {
@@ -190,9 +273,55 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
+    // Tự động sinh ra phiếu nhập như quá trình tạo phiếu mới và trường "Trạng thái" lúc này sẽ là "Tiếp nhận mới"
+    const selectedVatTu = (voucher.danhSachVatTu || []).filter((it) => selectedSet.has(it.id));
+    const now = new Date().toISOString();
+    const newItemsForPNK: ChiTietVatTu[] = selectedVatTu.map((it, idx) => ({
+      ...it,
+      id: `vt-${Date.now()}-${idx}`,
+      soPNKHoanTat: '', // Số PNK là đầu vào khởi tạo phiếu mới (soChungTu), không phải "Số PNK hoàn tất" (đầu ra sau sửa chữa)
+      trangThaiHienTai: 'Tiếp nhận mới', // Trường "Trạng thái" tại phiếu nhập kho mới lúc này sẽ là "Tiếp nhận mới"
+      ghiChuVatTu: it.ghiChuVatTu
+        ? `${it.ghiChuVatTu} (Từ BBBG: ${voucher.soChungTu})`
+        : `Từ BBBG: ${voucher.soChungTu}`,
+    }));
+
+    // Kiểm tra xem phiếu nhập kho này đã có sẵn trên hệ thống hay chưa
+    const existingPNKVoucher = (allVouchers || []).find(
+      (v) => v.loaiChungTu === 'PNK' && v.soChungTu.trim().toUpperCase() === trimmedPNK.toUpperCase()
+    );
+
+    let intakeVoucherToSave: PhieuGiaoDich;
+    if (existingPNKVoucher) {
+      intakeVoucherToSave = {
+        ...existingPNKVoucher,
+        danhSachVatTu: [...existingPNKVoucher.danhSachVatTu, ...newItemsForPNK],
+        updatedAt: now,
+      };
+    } else {
+      intakeVoucherToSave = {
+        id: `phieu-${Date.now()}`,
+        soChungTu: trimmedPNK,
+        loaiChungTu: 'PNK',
+        ngayTiepNhan: new Date().toISOString().slice(0, 10),
+        donViLienQuan: voucher.donViLienQuan || '',
+        canBoTiepNhan: voucher.canBoTiepNhan || '',
+        ghiChu: `Tự động tạo từ BBBG số ${voucher.soChungTu}`,
+        danhSachVatTu: newItemsForPNK,
+        createdAt: now,
+        updatedAt: now,
+      };
+    }
+
     setItems(updatedItems);
-    if (onUpdateVoucher) {
-      onUpdateVoucher(updatedVoucher);
+
+    if (onUpdateMultipleVouchers) {
+      onUpdateMultipleVouchers([updatedVoucher, intakeVoucherToSave]);
+    } else {
+      saveOrUpdateMultipleVouchers([updatedVoucher, intakeVoucherToSave]);
+      if (onUpdateVoucher) {
+        onUpdateVoucher(updatedVoucher);
+      }
     }
 
     setShowBBBGModal(false);
@@ -280,6 +409,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   };
 
   const handleOpenUpdateStatus = () => {
+    if (isBBBG) return;
     const preparedItems = (voucher.danhSachVatTu || []).map((it) => {
       const sauSua = it.trangThaiSauSua || 'TOT';
       let hienTai = it.trangThaiHienTai;
@@ -392,16 +522,18 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
           <div className="flex items-center gap-1.5 shrink-0">
             {!isUpdatingStatus ? (
               <>
-                {/* Button to enter repair update mode */}
-                <button
-                  onClick={handleOpenUpdateStatus}
-                  className="h-8 px-2.5 sm:px-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs text-white"
-                  title="Cập nhật trạng thái sau sửa chữa"
-                >
-                  <Wrench className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden sm:inline">Cập nhật sau sửa</span>
-                  <span className="sm:hidden">Cập nhật</span>
-                </button>
+                {/* Button to enter repair update mode (chỉ dành cho phiếu thông thường, BBBG không có quy trình sửa chữa/tình trạng) */}
+                {!isBBBG && (
+                  <button
+                    onClick={handleOpenUpdateStatus}
+                    className="h-8 px-2.5 sm:px-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs text-white"
+                    title="Cập nhật trạng thái sau sửa chữa"
+                  >
+                    <Wrench className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Cập nhật sau sửa</span>
+                    <span className="sm:hidden">Cập nhật</span>
+                  </button>
+                )}
 
                 {/* Đối với BBBG: Nút Gán PNK cho vật tư */}
                 {isBBBG ? (
@@ -414,7 +546,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                   >
                     <Warehouse className="w-3.5 h-3.5 shrink-0" />
                     <span className="hidden sm:inline">
-                      {isBBBGCompleted ? 'Xem/Sửa gán PNK' : 'Gán PNK cho BBBG'}
+                      {isBBBGCompleted ? 'Xem/Sửa gán PNK' : 'Gán PNK cho VT'}
                     </span>
                     <span className="sm:hidden">Gán PNK</span>
                   </button>
@@ -436,35 +568,104 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                   )
                 )}
 
-                {/* Nút tích hợp: In biên bản & Tự động xuất tệp PDF */}
-                <button
-                  onClick={handlePrint}
-                  disabled={isExportingPDF}
-                  className="h-8 px-2.5 sm:px-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-800 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all text-white shadow-xs"
-                  title="Tự động tạo file PDF tải về máy và mở lệnh in ấn biên bản A4"
-                >
-                  {isExportingPDF ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                  ) : (
-                    <Printer className="w-3.5 h-3.5 shrink-0" />
-                  )}
-                  <span className="hidden md:inline">{isExportingPDF ? 'Đang tạo PDF...' : 'In biên bản (PDF)'}</span>
-                  <span className="hidden sm:inline md:hidden">{isExportingPDF ? 'Tạo PDF...' : 'In PDF'}</span>
-                  <span className="sm:hidden">{isExportingPDF ? '...' : 'In'}</span>
-                </button>
+                {/* Overflow Menu gộp 3 chức năng: In biên bản (PDF), Xuất CSV, Chỉnh sửa */}
+                <div className="relative" ref={overflowMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowOverflowMenu((prev) => !prev)}
+                    className={`h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs text-white ${
+                      showOverflowMenu
+                        ? 'bg-white/30 ring-2 ring-white/40'
+                        : 'bg-white/15 hover:bg-white/25 active:bg-white/30'
+                    }`}
+                    title="Thao tác khác: In biên bản, Xuất CSV, Chỉnh sửa"
+                    aria-label="Thao tác khác"
+                    aria-expanded={showOverflowMenu}
+                  >
+                    <MoreVertical className="w-4 h-4 shrink-0" />
+                    <span className="hidden sm:inline">Thao tác</span>
+                  </button>
 
-                <button
-                  onClick={() => {
-                    onEdit(voucher);
-                    onClose();
-                  }}
-                  className="h-8 px-2.5 sm:px-3 bg-amber-600 hover:bg-amber-500 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all text-white shadow-xs"
-                  title="Chỉnh sửa phiếu"
-                >
-                  <Edit className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden sm:inline">Chỉnh sửa</span>
-                  <span className="sm:hidden">Sửa</span>
-                </button>
+                  {showOverflowMenu && (
+                    <div className="absolute right-0 top-full mt-1.5 w-56 sm:w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 origin-top-right">
+                      {/* 1. In biên bản & Tự động xuất tệp PDF */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOverflowMenu(false);
+                          handlePrint();
+                        }}
+                        disabled={isExportingPDF}
+                        className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <div className="p-1.5 rounded-lg bg-cyan-50 text-cyan-700 shrink-0">
+                          {isExportingPDF ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-cyan-600" />
+                          ) : (
+                            <Printer className="w-4 h-4 text-cyan-600" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block font-bold text-slate-800 text-xs">
+                            {isExportingPDF ? 'Đang tạo PDF...' : 'In biên bản (PDF)'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal block truncate">
+                            Xuất tệp PDF & mở lệnh in A4
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* 2. Xuất file CSV biểu mẫu: BBBG dùng Số PNK, các phiếu khác dùng Số PNK hoàn tất */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOverflowMenu(false);
+                          exportSingleVoucherToCSV(voucher);
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-3 transition-colors cursor-pointer"
+                        title={
+                          isBBBG
+                            ? 'Xuất tệp CSV cho BBBG (cột Số PNK)'
+                            : 'Xuất tệp CSV cho phiếu (cột Số PNK hoàn tất)'
+                        }
+                      >
+                        <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 shrink-0">
+                          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block font-bold text-slate-800 text-xs">Xuất file CSV</span>
+                          <span className="text-[10px] text-slate-400 font-normal block truncate">
+                            {isBBBG ? 'Cột Số PNK theo BBBG' : 'Cột Số PNK hoàn tất'}
+                          </span>
+                        </div>
+                      </button>
+
+                      <div className="my-1 border-t border-slate-100" />
+
+                      {/* 3. Chỉnh sửa phiếu */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowOverflowMenu(false);
+                          onEdit(voucher);
+                          onClose();
+                        }}
+                        className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-amber-900 hover:bg-amber-50/70 flex items-center gap-3 transition-colors cursor-pointer"
+                        title="Chỉnh sửa phiếu"
+                      >
+                        <div className="p-1.5 rounded-lg bg-amber-100 text-amber-800 shrink-0">
+                          <Edit className="w-4 h-4 text-amber-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block font-bold text-amber-900 text-xs">Chỉnh sửa phiếu</span>
+                          <span className="text-[10px] text-amber-700/70 font-normal block truncate">
+                            Cập nhật thông tin phiếu tiếp nhận
+                          </span>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <button
@@ -732,9 +933,6 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                           </p>
                         </div>
                       </div>
-                      <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 shrink-0 print:hidden">
-                        Không kiểm đếm kho (chống trùng)
-                      </span>
                     </div>
                   ) : (
                     <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
@@ -798,9 +996,11 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Hiển thị số PNK hoàn tất nếu có */}
+                  {/* Hiển thị số PNK nếu có */}
                   <div className="flex items-baseline justify-between border-b border-slate-200/80 pb-1">
-                    <span className="text-slate-500 font-medium">Số PNK hoàn tất:</span>
+                    <span className="text-slate-500 font-medium">
+                      {isBBBG ? 'Số PNK:' : 'Số PNK hoàn tất:'}
+                    </span>
                     {(() => {
                       const pnkItem = voucher.danhSachVatTu.find((i) => Boolean(i.soPNKHoanTat));
                       return pnkItem ? (
@@ -808,7 +1008,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                           {pnkItem.soPNKHoanTat}
                         </span>
                       ) : (
-                        <span className="text-slate-400 italic text-[11px]">— (Chưa nhập kho)</span>
+                        <span className="text-slate-400 italic text-[11px]">—</span>
                       );
                     })()}
                   </div>
@@ -830,13 +1030,15 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                     <span>Chi tiết danh mục thiết bị, vật tư ({voucher.danhSachVatTu.length})</span>
                   </h4>
 
-                  <button
-                    onClick={handleOpenUpdateStatus}
-                    className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer print:hidden bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors"
-                  >
-                    <Wrench className="w-3.5 h-3.5" />
-                    <span>Cập nhật kết quả sửa</span>
-                  </button>
+                  {!isBBBG && (
+                    <button
+                      onClick={handleOpenUpdateStatus}
+                      className="text-xs text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 cursor-pointer print:hidden bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition-colors"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Cập nhật kết quả sửa</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Mobile View: Dạng thẻ khi xem lướt trên điện thoại (sẽ tự động ẩn khi xuất PDF hoặc In ấn) */}
@@ -869,25 +1071,25 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                             <span className="font-mono font-bold text-red-600 text-xs">{item.serialNumber || '—'}</span>
                           </div>
                           <div>
-                            <span className="text-slate-400 block text-[10px]">Trạng thái:</span>
+                            <span className="text-slate-400 block text-[10px]">{isBBBG ? 'Hiện trạng:' : 'Trạng thái:'}</span>
                             <span className={`font-semibold ${statusBadge.text}`}>
                               {statusBadge.label}
                             </span>
                           </div>
                         </div>
 
-                        {/* Số PNK hoàn tất ở bên phải của card trên mobile */}
-                        {item.soPNKHoanTat && (
+                        {/* Số PNK ở bên phải của card trên mobile */}
+                        {item.soPNKHoanTat ? (
                           <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-200/80 bg-indigo-50/60 p-2 rounded-lg">
                             <span className="text-slate-600 font-semibold text-[11px] flex items-center gap-1">
                               <Warehouse className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Số PNK hoàn tất:</span>
+                              <span>{isBBBG ? 'Số PNK:' : 'Số PNK hoàn tất:'}</span>
                             </span>
                             <span className="font-mono font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200 text-xs">
                               {item.soPNKHoanTat}
                             </span>
                           </div>
-                        )}
+                        ) : null}
 
                         {item.ghiChuVatTu && (
                           <div className="text-[10px] text-slate-500 italic pt-1 border-t border-slate-200/50">
@@ -908,10 +1110,12 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                         <th className="py-2 px-2.5 font-bold text-center w-28 border border-slate-300 whitespace-nowrap">Mã VT</th>
                         <th className="py-2 px-3 font-bold border border-slate-300">Tên thiết bị / Vật tư</th>
                         <th className="py-2 px-3 font-bold text-center w-36 border border-slate-300 whitespace-nowrap">Số Serial (S/N)</th>
-                        <th className="py-2 px-2.5 font-bold text-center w-28 border border-slate-300 whitespace-nowrap">Trạng thái</th>
-                        {/* Trường Số PNK hoàn tất ở bên phải của dòng thiết bị */}
+                        <th className="py-2 px-2.5 font-bold text-center w-28 border border-slate-300 whitespace-nowrap">
+                          {isBBBG ? 'Hiện trạng' : 'Trạng thái'}
+                        </th>
+                        {/* Cột Số PNK đối với form BBBG, và Số PNK hoàn tất đối với các biểu mẫu khác */}
                         <th className="py-2 px-3 font-bold text-center w-36 border border-slate-300 whitespace-nowrap">
-                          Số PNK hoàn tất
+                          {isBBBG ? 'Số PNK' : 'Số PNK hoàn tất'}
                         </th>
                       </tr>
                     </thead>
@@ -943,16 +1147,14 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                                 {statusBadge.label}
                               </span>
                             </td>
-                            {/* Cột Số PNK hoàn tất ở bên phải */}
+                            {/* Cột Số PNK ở bên phải: nếu chưa gán thì để rỗng */}
                             <td className="py-2 px-3 text-center border border-slate-300 whitespace-nowrap">
                               {item.soPNKHoanTat ? (
                                 <span className="inline-flex items-center gap-1 font-mono font-bold text-xs bg-indigo-50 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded shadow-2xs">
                                   <Warehouse className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                                   <span>{item.soPNKHoanTat}</span>
                                 </span>
-                              ) : (
-                                <span className="text-slate-400 italic text-[11px]">—</span>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
                         );
@@ -1182,96 +1384,108 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
 
         {/* Modal Gán PNK cho vật tư trên BBBG */}
         {showBBBGModal && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 space-y-4 border border-slate-200 max-h-[90vh] flex flex-col">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-1 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[95vh] sm:h-[90vh] max-h-[96vh] flex flex-col border border-slate-200 overflow-hidden">
               {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
-                    <Warehouse className="w-5 h-5" />
+              <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/80">
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <div className="p-1.5 sm:p-2 bg-indigo-100 text-indigo-700 rounded-xl shrink-0">
+                    <Warehouse className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-sm sm:text-base">
-                      Cập nhật gán PNK cho vật tư trên BBBG
-                    </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Gán số PNK theo từng đợt nhập kho • Vật tư chưa gán vẫn giữ trạng thái "Tạm nhận"
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-slate-800 text-xs sm:text-base leading-tight truncate">
+                        Cập nhật gán PNK cho vật tư BBBG
+                      </h3>
+                      <span className="font-mono text-[11px] font-bold text-[#004b93] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        {voucher.soChungTu}
+                      </span>
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-slate-500 truncate mt-0.5">
+                      <span className="text-emerald-700 font-bold">{assignedBBBGItems} đã gán</span> • <span className="text-amber-700 font-bold">{pendingBBBGItems} tạm nhận</span> / {totalBBBGItems} vật tư
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowBBBGModal(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/60 cursor-pointer shrink-0 ml-1"
+                  aria-label="Đóng"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Progress & Overview */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs shrink-0 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Số biên bản bàn giao:</span>
-                  <span className="font-mono font-bold text-[#004b93]">{voucher.soChungTu}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Tiến độ gán PNK:</span>
-                  <span className="font-bold text-slate-800">
-                    <span className="text-emerald-700">{assignedBBBGItems} đã gán PNK</span> / {totalBBBGItems} thiết bị ({pendingBBBGItems} Tạm nhận)
-                  </span>
-                </div>
-              </div>
+              {/* Thanh điều khiển trên cùng (Gọn gàng - Không che lấp vật tư) */}
+              <div className="px-2.5 py-2 sm:px-4 sm:py-2.5 bg-slate-50 border-b border-slate-200 shrink-0 space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  {/* Ô nhập số PNK */}
+                  <div className="flex-1 flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 shrink-0 whitespace-nowrap">
+                      Số PNK: <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={bbbgPnkInput}
+                      onChange={(e) => setBbbgPnkInput(e.target.value)}
+                      placeholder="Nhập số PNK (VD: THA-KHO28-PNK9506...)"
+                      className="flex-1 h-8 sm:h-9 px-2.5 font-mono font-bold text-indigo-950 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm shadow-2xs"
+                      autoFocus
+                    />
+                  </div>
 
-              {/* Input Số PNK */}
-              <div className="shrink-0 space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700">
-                  Số Phiếu Nhập Kho (PNK) áp dụng cho các vật tư được chọn <span className="text-rose-500">*</span>:
-                </label>
-                <input
-                  type="text"
-                  value={bbbgPnkInput}
-                  onChange={(e) => setBbbgPnkInput(e.target.value)}
-                  placeholder="Ví dụ: THA-KHO28-PNK9506 hoặc PNK-HT-26-001..."
-                  className="w-full h-10 px-3 font-mono font-bold text-indigo-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                  autoFocus
-                />
-                
-                {/* Gợi ý các PNK đã có trong hệ thống */}
-                {(() => {
-                  const availablePNKs = Array.from(
-                    new Set(
-                      (allVouchers || [])
-                        .filter((v) => v.loaiChungTu === 'PNK' && v.soChungTu)
-                        .map((v) => v.soChungTu)
-                    )
-                  );
-                  if (availablePNKs.length === 0) return null;
-                  return (
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="text-[11px] text-slate-500 font-medium">Gợi ý PNK hiện có:</span>
-                      {availablePNKs.slice(0, 5).map((pnk) => (
-                        <button
-                          key={pnk}
-                          type="button"
-                          onClick={() => setBbbgPnkInput(pnk)}
-                          className="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer transition-colors"
-                        >
-                          {pnk}
-                        </button>
-                      ))}
+                  {/* Nút nạp từ file PNK thu gọn dạng 1 nút */}
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <input
+                      ref={pnkFileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv,.pdf,image/*"
+                      onChange={handlePnkFileUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => pnkFileInputRef.current?.click()}
+                      disabled={isParsingPnkFile}
+                      className="w-full sm:w-auto h-8 sm:h-9 px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-lg border border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs transition-colors shrink-0"
+                      title="Nạp từ file PNK (Excel / PDF / Ảnh) để tự động quét khớp Tên thiết bị và Số serial"
+                    >
+                      {isParsingPnkFile ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                      ) : (
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                      )}
+                      <span>Nạp từ file PNK</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Thông báo quét file (nếu có) */}
+                {pnkFileNotice && (
+                  <div className="px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-900 text-[11px] flex items-center justify-between gap-1.5 animate-in fade-in">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <CheckCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span className="truncate">{pnkFileNotice}</span>
                     </div>
-                  );
-                })()}
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => setPnkFileNotice(null)}
+                      className="text-blue-500 hover:text-blue-800 text-[10px] font-bold px-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
-              {/* Danh sách vật tư & Thao tác chọn */}
-              <div className="flex-1 overflow-hidden flex flex-col space-y-2 min-h-0">
-                <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-1.5">
+                {/* Dải bộ lọc & nút chọn nhanh vật tư */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setBbbgFilterTab('TAM_NHAN')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
-                        bbbgFilterTab === 'TAM_NHAN' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                        bbbgFilterTab === 'TAM_NHAN'
+                          ? 'bg-amber-600 text-white shadow-2xs'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       Tạm nhận ({pendingBBBGItems})
@@ -1279,8 +1493,10 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setBbbgFilterTab('DA_GAN')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
-                        bbbgFilterTab === 'DA_GAN' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                        bbbgFilterTab === 'DA_GAN'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       Đã gán ({assignedBBBGItems})
@@ -1288,100 +1504,142 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setBbbgFilterTab('ALL')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
-                        bbbgFilterTab === 'ALL' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                        bbbgFilterTab === 'ALL'
+                          ? 'bg-slate-800 text-white shadow-2xs'
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       Tất cả ({totalBBBGItems})
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs">
+                  <div className="flex items-center gap-1 text-[11px]">
+                    <span className="font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
+                      Đã chọn: {selectedBBBGItemIds.length}
+                    </span>
                     <button
                       type="button"
                       onClick={handleSelectAllPendingBBBG}
-                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-semibold cursor-pointer"
+                      className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md font-semibold cursor-pointer"
                     >
-                      Chọn tất cả Tạm nhận
+                      Tất cả Tạm nhận
                     </button>
                     <button
                       type="button"
                       onClick={handleSelectAllBBBG}
-                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold cursor-pointer"
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold cursor-pointer hidden sm:inline-block"
                     >
-                      Chọn tất cả
+                      Tất cả
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleDeselectAllBBBG}
-                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg cursor-pointer"
-                    >
-                      Bỏ chọn
-                    </button>
+                    {selectedBBBGItemIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleDeselectAllBBBG}
+                        className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-md cursor-pointer"
+                      >
+                        Bỏ chọn
+                      </button>
+                    )}
                   </div>
                 </div>
+              </div>
 
-                {/* Items List Table */}
-                <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl bg-white">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 bg-slate-100 text-slate-700 border-b border-slate-200 font-bold z-10">
+              {/* KHÔNG GIAN DÀNH ĐỂ HIỆN DANH SÁCH VẬT TƯ (Chiếm toàn bộ thân modal) */}
+              <div className="flex-1 overflow-auto bg-white min-h-0 relative">
+                {/* 1. Giao diện dạng BẢNG cho Desktop/Tablet (sm trở lên) */}
+                <div className="hidden sm:block min-w-full">
+                  <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                    <thead className="sticky top-0 bg-slate-100 text-slate-700 border-b border-slate-200 font-bold z-10 shadow-2xs">
                       <tr>
-                        <th className="py-2 px-2.5 w-10 text-center">Chọn</th>
+                        <th className="py-2 px-3 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              (voucher.danhSachVatTu || []).length > 0 &&
+                              selectedBBBGItemIds.length === (voucher.danhSachVatTu || []).length
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) handleSelectAllBBBG();
+                              else handleDeselectAllBBBG();
+                            }}
+                            className="w-4 h-4 text-indigo-600 rounded cursor-pointer accent-indigo-600"
+                            title="Chọn / Bỏ chọn tất cả"
+                          />
+                        </th>
                         <th className="py-2 px-2 text-center w-10">STT</th>
-                        <th className="py-2 px-3">Tên vật tư & Mã VT</th>
-                        <th className="py-2 px-3 w-40 text-left">Số Serial (S/N)</th>
-                        <th className="py-2 px-3 w-36 text-center">Trạng thái hiện tại</th>
+                        <th className="py-2 px-2 w-24 text-center">Mã VT</th>
+                        <th className="py-2 px-3 min-w-[200px]">Tên thiết bị / Vật tư</th>
+                        <th className="py-2 px-3 w-32 text-center">Số Serial (S/N)</th>
+                        <th className="py-2 px-2.5 w-24 text-center">Hiện trạng</th>
+                        <th className="py-2 px-3 w-32 text-center">Số PNK</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {(voucher.danhSachVatTu || [])
                         .filter((it) => {
-                          if (bbbgFilterTab === 'TAM_NHAN') return !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận';
-                          if (bbbgFilterTab === 'DA_GAN') return Boolean(it.soPNKHoanTat) && it.trangThaiHienTai !== 'Tạm nhận';
+                          if (bbbgFilterTab === 'TAM_NHAN') return it.trangThaiHienTai === 'Tạm nhận' || !it.soPNKHoanTat;
+                          if (bbbgFilterTab === 'DA_GAN') return it.trangThaiHienTai === 'Đã gán' || (Boolean(it.soPNKHoanTat) && it.trangThaiHienTai !== 'Tạm nhận');
                           return true;
                         })
                         .map((item, idx) => {
                           const isSelected = selectedBBBGItemIds.includes(item.id);
-                          const isAssigned = Boolean(item.soPNKHoanTat) && item.trangThaiHienTai !== 'Tạm nhận';
+                          const isAssigned = item.trangThaiHienTai === 'Đã gán' || (Boolean(item.soPNKHoanTat) && item.trangThaiHienTai !== 'Tạm nhận');
                           return (
                             <tr
                               key={item.id}
                               onClick={() => handleToggleSelectBBBGItem(item.id)}
                               className={`cursor-pointer transition-colors ${
-                                isSelected ? 'bg-indigo-50/70 hover:bg-indigo-50' : 'hover:bg-slate-50'
+                                isSelected ? 'bg-indigo-50/90 hover:bg-indigo-100/80 border-l-3 border-indigo-600' : 'hover:bg-slate-50'
                               }`}
                             >
-                              <td className="py-2 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                              <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => handleToggleSelectBBBGItem(item.id)}
-                                  className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                                  className="w-4 h-4 text-indigo-600 rounded cursor-pointer accent-indigo-600"
                                 />
                               </td>
                               <td className="py-2 px-2 text-center font-bold text-slate-500">
                                 {idx + 1}
                               </td>
+                              <td className="py-2 px-2 text-center font-mono font-bold text-[#004b93] whitespace-nowrap">
+                                {item.maVT || '—'}
+                              </td>
                               <td className="py-2 px-3">
                                 <div className="font-bold text-slate-900 leading-snug">{item.tenVT}</div>
-                                {item.maVT && (
-                                  <span className="font-mono text-[10px] text-slate-500">Mã VT: {item.maVT}</span>
+                                {item.ghiChuVatTu && (
+                                  <span className="text-[10px] text-slate-400 italic block">
+                                    {item.ghiChuVatTu}
+                                  </span>
                                 )}
                               </td>
-                              <td className="py-2 px-3 whitespace-nowrap">
-                                <span className="font-mono font-bold text-red-600 bg-red-50/80 px-2 py-0.5 rounded border border-red-200">
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                <span className="font-mono font-bold text-red-600 bg-red-50/90 px-2 py-0.5 rounded border border-red-200">
                                   {item.serialNumber || '—'}
                                 </span>
                               </td>
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                              {/* Cột Hiện trạng */}
+                              <td className="py-2 px-2.5 text-center whitespace-nowrap">
                                 {isAssigned ? (
-                                  <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                    PNK: {item.soPNKHoanTat}
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+                                    Đã gán
                                   </span>
                                 ) : (
                                   <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
                                     Tạm nhận
                                   </span>
+                                )}
+                              </td>
+                              {/* Cột Số PNK: rỗng nếu chưa gán, có giá trị nếu đã gán */}
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                {isAssigned && item.soPNKHoanTat ? (
+                                  <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-xs">
+                                    {item.soPNKHoanTat}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300 italic">—</span>
                                 )}
                               </td>
                             </tr>
@@ -1390,29 +1648,98 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                     </tbody>
                   </table>
                 </div>
+
+                {/* 2. Giao diện dạng CARD TỐI ƯU MÀN HÌNH ĐIỆN THOẠI (Mobile < sm) */}
+                <div className="block sm:hidden divide-y divide-slate-200 p-2 space-y-2">
+                  {(voucher.danhSachVatTu || [])
+                    .filter((it) => {
+                      if (bbbgFilterTab === 'TAM_NHAN') return it.trangThaiHienTai === 'Tạm nhận' || !it.soPNKHoanTat;
+                      if (bbbgFilterTab === 'DA_GAN') return it.trangThaiHienTai === 'Đã gán' || (Boolean(it.soPNKHoanTat) && it.trangThaiHienTai !== 'Tạm nhận');
+                      return true;
+                    })
+                    .map((item, idx) => {
+                      const isSelected = selectedBBBGItemIds.includes(item.id);
+                      const isAssigned = item.trangThaiHienTai === 'Đã gán' || (Boolean(item.soPNKHoanTat) && item.trangThaiHienTai !== 'Tạm nhận');
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => handleToggleSelectBBBGItem(item.id)}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-50/90 border-indigo-500 shadow-xs ring-1 ring-indigo-500'
+                              : 'bg-white border-slate-200 shadow-2xs hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectBBBGItem(item.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-5 h-5 text-indigo-600 rounded cursor-pointer accent-indigo-600 mt-0.5 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 mb-1">
+                                <span className="font-mono text-xs font-bold text-[#004b93] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                  #{idx + 1} {item.maVT || '—'}
+                                </span>
+                                {isAssigned ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                    Đã gán
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                                    Tạm nhận
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="font-bold text-slate-900 text-xs leading-snug line-clamp-2">
+                                {item.tenVT}
+                              </div>
+
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                <span className="text-slate-500">Serial:</span>
+                                <span className="font-mono font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                                  {item.serialNumber || '—'}
+                                </span>
+
+                                {isAssigned && item.soPNKHoanTat && (
+                                  <span className="ml-auto font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                    PNK: {item.soPNKHoanTat}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
 
-              {/* Modal Actions */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200 shrink-0">
-                <span className="text-xs text-slate-500">
-                  Đã chọn: <b className="text-indigo-700">{selectedBBBGItemIds.length}</b> vật tư
+              {/* Modal Actions Footer (Gọn, dính đáy, dễ bấm trên mobile) */}
+              <div className="px-3 py-2 sm:px-4 sm:py-2.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0 gap-2">
+                <span className="text-[11px] sm:text-xs text-slate-600 font-medium">
+                  Đã chọn: <b className="text-indigo-700 font-extrabold">{selectedBBBGItemIds.length}</b>/{totalBBBGItems} vật tư
                 </span>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setShowBBBGModal(false)}
-                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 cursor-pointer"
+                    className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 cursor-pointer"
                   >
                     Hủy bỏ
                   </button>
                   <button
                     type="button"
                     onClick={handleConfirmBBBGAssign}
-                    disabled={!bbbgPnkInput.trim() || selectedBBBGItemIds.length === 0}
-                    className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed shadow-md"
+                    disabled={!bbbgPnkInput.trim() || selectedBBBGItemIds.length === 0 || isParsingPnkFile}
+                    className="px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed shadow-md transition-all active:scale-95"
+                    title="Hoàn thành gán PNK cho các vật tư đã chọn"
                   >
-                    <Warehouse className="w-4 h-4" />
-                    <span>Xác nhận gán PNK ({selectedBBBGItemIds.length})</span>
+                    <Check className="w-4 h-4" />
+                    <span>Hoàn thành ({selectedBBBGItemIds.length})</span>
                   </button>
                 </div>
               </div>

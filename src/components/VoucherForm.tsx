@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   FileText, 
   Layers, 
@@ -18,7 +18,8 @@ import {
   User,
   Hash,
   ChevronDown,
-  Info
+  Info,
+  Warehouse
 } from 'lucide-react';
 import { 
   PhieuGiaoDich, 
@@ -37,8 +38,10 @@ import {
   TRANG_THAI_HIEN_TAI_OPTIONS 
 } from '../constants/sampleData';
 import { loadVouchers } from '../utils/storage';
+import { getAllPendingBBBGItems } from '../utils/equipmentMatcher';
 import { EquipmentCatalogModal } from './EquipmentCatalogModal';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { BBBGIntakeModal } from './BBBGIntakeModal';
 
 interface VoucherFormProps {
   initialData?: PhieuGiaoDich | null;
@@ -47,6 +50,7 @@ interface VoucherFormProps {
   onCancel: () => void;
   onOpenSmartScan: () => void;
   onDelete?: (id: string) => void;
+  onUpdateMultipleVouchers?: (updatedVouchers: PhieuGiaoDich[]) => void;
 }
 
 export const VoucherForm: React.FC<VoucherFormProps> = ({
@@ -56,6 +60,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   onCancel,
   onOpenSmartScan,
   onDelete,
+  onUpdateMultipleVouchers,
 }) => {
   // Master State
   const [loaiChungTu, setLoaiChungTu] = useState<LoaiChungTu>(
@@ -100,6 +105,48 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+  const [isBBBGIntakeOpen, setIsBBBGIntakeOpen] = useState(false);
+  const [bbbgAssignToast, setBbbgAssignToast] = useState<string | null>(null);
+
+  // Danh sách toàn bộ vật tư của các BBBG chưa hoàn thành gán trên hệ thống
+  const pendingBBBGList = useMemo(() => {
+    return getAllPendingBBBGItems(existingVouchers || loadVouchers());
+  }, [existingVouchers]);
+
+  // Xử lý sau khi gán PNK từ modal BBBG thành công
+  const handleBBBGAssignSuccess = (
+    assignedItems: ChiTietVatTu[],
+    updatedBBBGVouchers: PhieuGiaoDich[],
+    pnkNumber: string
+  ) => {
+    // 1. Chuyển loại chứng từ sang PNK và điền số chứng từ nếu chưa có
+    if (!soChungTu || soChungTu === 'PXK-' || soChungTu === 'BBBG-') {
+      setSoChungTu(pnkNumber);
+    }
+    setLoaiChungTu('PNK');
+
+    // 2. Thêm các vật tư đã gán vào form phiếu nhập kho
+    setDanhSachVatTu((prev) => {
+      const isBlank =
+        prev.length === 1 &&
+        !prev[0].tenVT.trim() &&
+        !prev[0].serialNumber.trim();
+      if (isBlank) {
+        return assignedItems;
+      }
+      return [...prev, ...assignedItems];
+    });
+
+    // 3. Đồng bộ cập nhật các phiếu BBBG gốc (chuyển vật tư sang Đã gán + Số PNK)
+    if (onUpdateMultipleVouchers) {
+      onUpdateMultipleVouchers(updatedBBBGVouchers);
+    }
+
+    setBbbgAssignToast(
+      `Đã gán thành công ${assignedItems.length} vật tư từ BBBG vào phiếu nhập ${pnkNumber}!`
+    );
+    setTimeout(() => setBbbgAssignToast(null), 3500);
+  };
 
   // Helper get prefix format: PNK- | PXK- | BBBG-
   const getPrefix = (type: LoaiChungTu): string => {
@@ -316,7 +363,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
         serialNumber: '',
         trangThaiSauSua: 'TOT',
         soPNKHoanTat: '',
-        trangThaiHienTai: 'Tiếp nhận mới',
+        trangThaiHienTai: loaiChungTu === 'BBBG' || (loaiChungTu as string) === 'GUI_MUON' ? 'Tạm nhận' : 'Tiếp nhận mới',
         ghiChuVatTu: '',
       },
     ]);
@@ -335,6 +382,14 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4">
           <CheckCircle className="w-5 h-5 text-white" />
           <span className="text-sm font-bold">Lưu phiếu giao dịch thành công!</span>
+        </div>
+      )}
+
+      {/* Toast alert gán từ BBBG */}
+      {bbbgAssignToast && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-indigo-700 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-4 border border-indigo-400">
+          <Warehouse className="w-5 h-5 text-indigo-200" />
+          <span className="text-sm font-bold">{bbbgAssignToast}</span>
         </div>
       )}
 
@@ -377,6 +432,20 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
 
             {/* Header Actions */}
             <div className="flex items-center gap-2">
+              {/* Nút tiện ích gán PNK từ BBBG chưa hoàn thành */}
+              {pendingBBBGList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsBBBGIntakeOpen(true)}
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs active:scale-95"
+                  title="Gán PNK từ các vật tư của BBBG chưa hoàn thành (thủ công hoặc nạp file Excel/PDF/ảnh)"
+                >
+                  <Warehouse className="w-3.5 h-3.5 text-indigo-100" />
+                  <span className="hidden sm:inline">Gán từ BBBG ({pendingBBBGList.length} Tạm nhận)</span>
+                  <span className="sm:hidden">BBBG ({pendingBBBGList.length})</span>
+                </button>
+              )}
+
               {/* AI OCR Shortcut */}
               <button
                 type="button"
@@ -390,6 +459,33 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Banner gợi ý gán PNK khi chọn loại phiếu PNK */}
+          {loaiChungTu === 'PNK' && pendingBBBGList.length > 0 && (
+            <div className="mx-4 sm:mx-5 mt-4 p-3 bg-gradient-to-r from-indigo-50/90 via-blue-50/80 to-indigo-50/90 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-600 text-white rounded-lg shrink-0 shadow-xs">
+                  <Warehouse className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-indigo-900 block sm:inline">
+                    Tạo phiếu nhập từ BBBG tạm nhận:
+                  </span>{' '}
+                  <span>
+                    Hệ thống có <b>{pendingBBBGList.length}</b> vật tư "Tạm nhận" từ các BBBG chưa hoàn thành đang chờ gán PNK chính thức.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBBBGIntakeOpen(true)}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Warehouse className="w-3.5 h-3.5" />
+                <span>Gán vật tư BBBG (Checklist / File)</span>
+              </button>
+            </div>
+          )}
 
           <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
             {/* Loại chứng từ */}
@@ -791,6 +887,15 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
           }}
         />
       )}
+
+      {/* BBBG Intake & Assignment Modal */}
+      <BBBGIntakeModal
+        isOpen={isBBBGIntakeOpen}
+        onClose={() => setIsBBBGIntakeOpen(false)}
+        currentSoChungTu={soChungTu}
+        existingVouchers={existingVouchers || loadVouchers()}
+        onAssignSuccess={handleBBBGAssignSuccess}
+      />
     </div>
   );
 };

@@ -198,6 +198,7 @@ export const VoucherList: React.FC<VoucherListProps> = ({
             >
               <option value="ALL">Tất cả trạng thái</option>
               <option value="Tạm nhận">Tạm nhận (BBBG)</option>
+              <option value="Đã gán">Đã gán (BBBG)</option>
               <option value="Tiếp nhận mới">Tiếp nhận mới</option>
               <option value="NK tốt">NK tốt</option>
               <option value="NK hỏng">NK hỏng</option>
@@ -404,13 +405,15 @@ export const VoucherList: React.FC<VoucherListProps> = ({
                             const pnkItems = voucher.danhSachVatTu.filter((i) => Boolean(i.soPNKHoanTat));
                             if (pnkItems.length > 0) {
                               const firstPNK = pnkItems[0].soPNKHoanTat;
+                              const isBBBG =
+                                voucher.loaiChungTu === 'BBBG' || (voucher.loaiChungTu as string) === 'GUI_MUON';
                               return (
                                 <span 
                                   className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1 shadow-2xs"
-                                  title={`Số PNK hoàn tất: ${firstPNK}`}
+                                  title={`${isBBBG ? 'Số PNK' : 'Số PNK hoàn tất'}: ${firstPNK}`}
                                 >
                                   <Warehouse className="w-3 h-3 text-indigo-600" />
-                                  <span>PNK: {firstPNK}</span>
+                                  <span>{isBBBG ? 'PNK:' : 'PNK HT:'} {firstPNK}</span>
                                 </span>
                               );
                             }

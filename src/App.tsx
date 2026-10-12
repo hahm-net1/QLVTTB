@@ -9,6 +9,7 @@ import {
   loadVouchers, 
   saveVouchers,
   saveOrUpdateVoucher, 
+  saveOrUpdateMultipleVouchers,
   deleteVoucher, 
   resetToSampleData, 
   clearAllVouchers,
@@ -18,6 +19,7 @@ import {
 import { 
   subscribeToCloudVouchers, 
   saveVoucherToCloud, 
+  saveMultipleVouchersToCloud,
   deleteVoucherFromCloud, 
   clearAllCloudVouchers 
 } from './services/voucherSync';
@@ -101,6 +103,25 @@ export default function App() {
     } catch (err) {
       console.error('Lỗi đồng bộ Firebase Firestore:', err);
       showToast(`Đã lưu phiếu ${savedVoucher.soChungTu} (đang ngoại tuyến)`);
+    }
+  };
+
+  const handleSaveMultipleVouchers = async (updatedList: PhieuGiaoDich[]) => {
+    if (!updatedList || updatedList.length === 0) return;
+    const updated = saveOrUpdateMultipleVouchers(updatedList);
+    setVouchers(updated);
+    if (detailVoucher) {
+      const refreshed = updatedList.find((v) => v.id === detailVoucher.id);
+      if (refreshed) {
+        setDetailVoucher(refreshed);
+      }
+    }
+    showToast(`Đã lưu ${updatedList.length} phiếu giao dịch (đồng bộ BBBG & PNK). Đang đồng bộ Cloud...`);
+    try {
+      await saveMultipleVouchersToCloud(updatedList);
+      showToast(`Đã đồng bộ realtime ${updatedList.length} phiếu lên Cloud Firestore!`);
+    } catch (err) {
+      console.error('Lỗi đồng bộ Firebase Firestore:', err);
     }
   };
 
@@ -221,6 +242,7 @@ export default function App() {
             }}
             onOpenSmartScan={() => setIsSmartScanOpen(true)}
             onDelete={handleDeleteVoucher}
+            onUpdateMultipleVouchers={handleSaveMultipleVouchers}
           />
         )}
 
@@ -338,6 +360,7 @@ export default function App() {
         onEdit={handleEditVoucher}
         onDelete={handleDeleteVoucher}
         onUpdateVoucher={handleSaveVoucher}
+        onUpdateMultipleVouchers={handleSaveMultipleVouchers}
       />
     </div>
   );
