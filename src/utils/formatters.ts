@@ -7,7 +7,8 @@ export function getLoaiChungTuLabel(type: LoaiChungTu): string {
     case 'PNK':
       return 'Phiếu nhập kho';
     case 'GUI_MUON':
-      return 'Gửi/Mượn';
+    case 'BBBG':
+      return 'Biên bản bàn giao (BBBG)';
     default:
       return type;
   }
@@ -30,8 +31,10 @@ export function getLoaiChungTuBadge(type: LoaiChungTu): { label: string; bg: str
         border: 'border-emerald-200',
       };
     case 'GUI_MUON':
+    case 'BBBG':
+    default:
       return {
-        label: 'Gửi / Mượn',
+        label: 'BBBG',
         bg: 'bg-amber-50 text-amber-700',
         text: 'text-amber-700',
         border: 'border-amber-200',
@@ -69,6 +72,7 @@ export function getVoucherPrefix(type: LoaiChungTu): string {
     case 'PXK':
       return 'PXK-';
     case 'GUI_MUON':
+    case 'BBBG':
       return 'BBBG-';
     default:
       return 'PXK-';
@@ -97,7 +101,23 @@ export function formatDateVN(dateStr: string): string {
 }
 
 export function getItemStatusBadge(status: string): { label: string; bg: string; text: string; border: string } {
+  if (status && (status.startsWith('PNK-') || status.startsWith('PNK') || status.includes('/N/'))) {
+    return {
+      label: status,
+      bg: 'bg-indigo-50 text-indigo-700 font-mono font-bold',
+      text: 'text-indigo-700',
+      border: 'border-indigo-300',
+    };
+  }
+
   switch (status) {
+    case 'Tạm nhận':
+      return {
+        label: 'Tạm nhận',
+        bg: 'bg-amber-100 text-amber-900 font-bold',
+        text: 'text-amber-900',
+        border: 'border-amber-400',
+      };
     case 'NK tốt':
       return {
         label: 'NK tốt',

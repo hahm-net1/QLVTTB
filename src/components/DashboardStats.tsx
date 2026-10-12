@@ -30,7 +30,45 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 }) => {
   // Compute metrics
   const totalVouchers = vouchers.length;
-  const allItems = vouchers.flatMap((v) => v.danhSachVatTu);
+
+  // Helper kiểm tra BBBG đã hoàn thành gán PNK
+  const isCompletedBBBG = (v: PhieuGiaoDich) => {
+    const isBB = v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG';
+    if (!isBB) return false;
+    const hasCompletedNote = Boolean(v.ghiChu && v.ghiChu.includes('Đã hoàn thành nhập kho đơn vị'));
+    const allAssigned = Boolean(
+      v.danhSachVatTu &&
+      v.danhSachVatTu.length > 0 &&
+      v.danhSachVatTu.every(
+        (it) => it.soPNKHoanTat && it.soPNKHoanTat.trim() !== '' && it.trangThaiHienTai !== 'Tạm nhận'
+      )
+    );
+    return hasCompletedNote || allAssigned;
+  };
+
+  // Số lượng BBBG đã hoàn thành gán PNK
+  const completedBBBGVouchers = vouchers.filter((v) => isCompletedBBBG(v));
+  const countCompletedBBBG = completedBBBGVouchers.length;
+  // Số lượng vật tư của BBBG đã hoàn thành gán PNK được loại trừ để chống trùng lặp
+  const excludedCompletedItemsCount = completedBBBGVouchers.reduce((sum, v) => sum + v.danhSachVatTu.length, 0);
+
+  // DANH SÁCH VẬT TƯ KIỂM ĐẾM TRONG KHO (CHỐNG TRÙNG LẶP):
+  // 1. Toàn bộ vật tư từ PXK, PNK
+  // 2. Dữ liệu về vật tư của BBBG khi đã hoàn thành gán PNK sẽ KHÔNG ĐƯỢC KIỂM ĐẾM trong các thống kê kho
+  // 3. Đối với BBBG chưa hoàn thành: chỉ kiểm đếm các vật tư còn đang "Tạm nhận" chờ gán PNK (tránh đếm trùng các vật tư đã gán PNK)
+  const allItems = vouchers.flatMap((v) => {
+    const isBB = v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG';
+    if (!isBB) {
+      return v.danhSachVatTu;
+    }
+    if (isCompletedBBBG(v)) {
+      // Đã hoàn thành nhập kho đơn vị: KHÔNG kiểm đếm trong các thống kê kho
+      return [];
+    }
+    // BBBG chưa hoàn thành: chỉ kiểm đếm các vật tư còn đang "Tạm nhận"
+    return v.danhSachVatTu.filter((it) => !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận');
+  });
+
   const totalItems = allItems.length;
 
   const countNKTot = allItems.filter(
@@ -49,15 +87,20 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     (i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới'
   ).length;
 
+  const countTamNhan = allItems.filter(
+    (i) => i.trangThaiHienTai === 'Tạm nhận'
+  ).length;
+
   const pctTot = totalItems > 0 ? Math.round((countNKTot / totalItems) * 100) : 0;
   const pctHong = totalItems > 0 ? Math.round((countNKHong / totalItems) * 100) : 0;
   const pctKTT = totalItems > 0 ? Math.round((countKTT / totalItems) * 100) : 0;
   const pctMoi = totalItems > 0 ? Math.round((countTiepNhanMoi / totalItems) * 100) : 0;
+  const pctTamNhan = totalItems > 0 ? Math.round((countTamNhan / totalItems) * 100) : 0;
 
   // Voucher type breakdown
   const countPXK = vouchers.filter((v) => v.loaiChungTu === 'PXK').length;
   const countPNK = vouchers.filter((v) => v.loaiChungTu === 'PNK').length;
-  const countGM = vouchers.filter((v) => v.loaiChungTu === 'GUI_MUON').length;
+  const countGM = vouchers.filter((v) => v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG').length;
 
   // Top equipment types (Mã VT & Tên VT)
   interface EquipStat {
@@ -138,7 +181,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
           <div>
             <p className="text-[11px] font-bold text-slate-400 uppercase">Tổng số phiếu</p>
             <h3 className="text-xl sm:text-2xl font-black text-slate-800">{totalVouchers}</h3>
-            <p className="text-[10px] text-slate-500">{countPXK} PXK, {countPNK} PNK</p>
+            <p className="text-[10px] text-slate-500">{countPXK} PXK, {countPNK} PNK, {countGM} BBBG</p>
           </div>
         </div>
 
@@ -202,6 +245,24 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               </div>
             </div>
 
+            {/* Tạm nhận (BBBG chờ gán PNK) */}
+            {countTamNhan > 0 && (
+              <div>
+                <div className="flex justify-between text-xs font-semibold mb-1">
+                  <span className="text-amber-800 flex items-center gap-1.5">
+                    <PackageCheck className="w-3.5 h-3.5 text-amber-600" /> Tạm nhận (BBBG chờ gán PNK)
+                  </span>
+                  <span className="font-mono">{countTamNhan} ({pctTamNhan}%)</span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-amber-500 h-2.5 rounded-full transition-all"
+                    style={{ width: `${pctTamNhan}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* NK Tốt */}
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
@@ -259,11 +320,17 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             Hiện trạng phân bổ thiết bị
           </h3>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
             <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
               <Layers className="w-4 h-4 text-blue-600 mx-auto mb-1" />
               <p className="text-base font-black text-blue-700">{countTiepNhanMoi}</p>
               <p className="text-[10px] text-blue-800 font-bold">Tiếp nhận mới</p>
+            </div>
+
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <PackageCheck className="w-4 h-4 text-amber-600 mx-auto mb-1" />
+              <p className="text-base font-black text-amber-700">{countTamNhan}</p>
+              <p className="text-[10px] text-amber-800 font-bold">Tạm nhận (BBBG)</p>
             </div>
 
             <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
@@ -272,7 +339,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               <p className="text-[10px] text-emerald-800 font-bold">NK tốt</p>
             </div>
 
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl">
               <AlertTriangle className="w-4 h-4 text-amber-600 mx-auto mb-1" />
               <p className="text-base font-black text-amber-700">{countKTT}</p>
               <p className="text-[10px] text-amber-800 font-bold">Kiểm tra thêm</p>
@@ -285,7 +352,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             </div>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1.5">
             <p className="font-semibold text-slate-700">Phân loại chứng từ đã lập:</p>
             <div className="flex justify-between">
               <span>PXK (Phiếu xuất kho):</span>
@@ -296,9 +363,19 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               <span className="font-bold text-emerald-700">{countPNK} phiếu</span>
             </div>
             <div className="flex justify-between">
-              <span>Gửi / Mượn thiết bị:</span>
-              <span className="font-bold text-amber-700">{countGM} phiếu</span>
+              <span>BBBG thiết bị:</span>
+              <span className="font-bold text-amber-700">
+                {countGM} phiếu {countCompletedBBBG > 0 && `(${countCompletedBBBG} đã hoàn thành gán PNK)`}
+              </span>
             </div>
+            {countCompletedBBBG > 0 && (
+              <div className="pt-1.5 border-t border-slate-200 text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Đã loại trừ <b>{excludedCompletedItemsCount}</b> vật tư từ <b>{countCompletedBBBG}</b> BBBG đã hoàn thành nhập kho đơn vị để chống trùng lặp số liệu.
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

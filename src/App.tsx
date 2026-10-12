@@ -333,6 +333,7 @@ export default function App() {
       {/* Voucher Detail & Print Modal */}
       <VoucherDetailModal
         voucher={detailVoucher}
+        allVouchers={vouchers}
         onClose={() => setDetailVoucher(null)}
         onEdit={handleEditVoucher}
         onDelete={handleDeleteVoucher}

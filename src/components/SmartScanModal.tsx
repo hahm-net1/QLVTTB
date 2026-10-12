@@ -189,7 +189,10 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
   const handleApply = () => {
     if (!extractedResult) return;
 
-    // Tuân thủ: không tự bịa thêm số, nếu không tìm thấy thì để chuỗi rỗng ""; Trạng thái là "Tiếp nhận mới"
+    const detectedType = extractedResult.loaiChungTu || (/PNK|\/N\//i.test(extractedResult.soChungTu || '') ? 'PNK' : /BBBG|bàn giao|gửi mượn/i.test(extractedResult.soChungTu || '') ? 'BBBG' : 'PXK');
+    const defaultItemStatus = (detectedType === 'BBBG' || (detectedType as string) === 'GUI_MUON') ? 'Tạm nhận' : 'Tiếp nhận mới';
+
+    // Tuân thủ: không tự bịa thêm số, nếu không tìm thấy thì để chuỗi rỗng ""; Trạng thái là "Tạm nhận" (nếu BBBG) hoặc "Tiếp nhận mới"
     const formattedVatTu: ChiTietVatTu[] = (extractedResult.danhSachVatTu || []).map((item, idx) => {
       const maVT = item.Ma_VT || item.maVT || '';
       const tenVT = item.Ten_VT || item.tenVT || '';
@@ -201,14 +204,14 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
         serialNumber,
         trangThaiSauSua: item.trangThaiSauSua || 'TOT',
         soPNKHoanTat: '',
-        trangThaiHienTai: 'Tiếp nhận mới',
+        trangThaiHienTai: defaultItemStatus,
         ghiChuVatTu: '',
       };
     });
 
     const partialVoucher: Partial<PhieuGiaoDich> = {
       soChungTu: extractedResult.soChungTu || '',
-      loaiChungTu: extractedResult.loaiChungTu || (/PNK|\/N\//i.test(extractedResult.soChungTu || '') ? 'PNK' : 'PXK'),
+      loaiChungTu: detectedType,
       ngayTiepNhan: extractedResult.ngayTiepNhan || new Date().toISOString().slice(0, 10),
       donViLienQuan: '',
       canBoTiepNhan: extractedResult.canBoTiepNhan || '',
@@ -503,7 +506,7 @@ Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
                     >
                       <option value="PNK">Phiếu nhập kho (PNK - Ký hiệu: /N/)</option>
                       <option value="PXK">Phiếu xuất kho (PXK - Ký hiệu: /X/)</option>
-                      <option value="GUI_MUON">Gửi/Mượn / Bàn giao (BBBG)</option>
+                      <option value="GUI_MUON">BBBG / Bàn giao (BBBG)</option>
                     </select>
                   </div>
                   <div className="mt-2 text-[11px] text-slate-500">

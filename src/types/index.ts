@@ -1,4 +1,4 @@
-export type LoaiChungTu = 'PXK' | 'PNK' | 'GUI_MUON';
+export type LoaiChungTu = 'PXK' | 'PNK' | 'GUI_MUON' | 'BBBG';
 
 export type TrangThaiSauSua = 'TOT' | 'HONG' | 'LOI';
 

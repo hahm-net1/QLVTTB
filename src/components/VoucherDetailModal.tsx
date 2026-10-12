@@ -27,6 +27,7 @@ import { generateVoucherPDF } from '../utils/pdfGenerator';
 
 interface VoucherDetailModalProps {
   voucher: PhieuGiaoDich | null;
+  allVouchers?: PhieuGiaoDich[];
   onClose: () => void;
   onEdit: (voucher: PhieuGiaoDich) => void;
   onDelete?: (id: string) => void;
@@ -35,6 +36,7 @@ interface VoucherDetailModalProps {
 
 export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   voucher,
+  allVouchers,
   onClose,
   onEdit,
   onUpdateVoucher,
@@ -49,6 +51,12 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   const [pnkInput, setPnkInput] = useState('');
   const [pnkScope, setPnkScope] = useState<'TOT' | 'HONG' | 'ALL'>('TOT');
 
+  // BBBG PNK Assignment Modal States
+  const [showBBBGModal, setShowBBBGModal] = useState(false);
+  const [bbbgPnkInput, setBbbgPnkInput] = useState('');
+  const [selectedBBBGItemIds, setSelectedBBBGItemIds] = useState<string[]>([]);
+  const [bbbgFilterTab, setBbbgFilterTab] = useState<'ALL' | 'TAM_NHAN' | 'DA_GAN'>('TAM_NHAN');
+
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,6 +69,136 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   if (!voucher) return null;
 
   const typeBadge = getLoaiChungTuBadge(voucher.loaiChungTu);
+
+  const isBBBG = Boolean(
+    voucher && (voucher.loaiChungTu === 'GUI_MUON' || (voucher.loaiChungTu as string) === 'BBBG')
+  );
+
+  const isBBBGCompleted = Boolean(
+    isBBBG &&
+    voucher &&
+    ((voucher.ghiChu && voucher.ghiChu.includes('Đã hoàn thành nhập kho đơn vị')) ||
+      (voucher.danhSachVatTu &&
+        voucher.danhSachVatTu.length > 0 &&
+        voucher.danhSachVatTu.every(
+          (it) => it.soPNKHoanTat && it.soPNKHoanTat.trim() !== '' && it.trangThaiHienTai !== 'Tạm nhận'
+        )))
+  );
+
+  const totalBBBGItems = voucher.danhSachVatTu?.length || 0;
+  const assignedBBBGItems = (voucher.danhSachVatTu || []).filter(
+    (i) => i.soPNKHoanTat && i.soPNKHoanTat.trim() !== '' && i.trangThaiHienTai !== 'Tạm nhận'
+  ).length;
+  const pendingBBBGItems = (voucher.danhSachVatTu || []).filter(
+    (i) => !i.soPNKHoanTat || i.trangThaiHienTai === 'Tạm nhận'
+  ).length;
+
+  const handleOpenBBBGModal = () => {
+    if (!voucher) return;
+    // Mặc định chọn tất cả các vật tư còn đang "Tạm nhận" (chưa gán PNK)
+    const pendingIds = (voucher.danhSachVatTu || [])
+      .filter((it) => !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận')
+      .map((it) => it.id);
+    setSelectedBBBGItemIds(pendingIds);
+
+    // Gợi ý số PNK
+    const firstAssigned = (voucher.danhSachVatTu || []).find((it) => it.soPNKHoanTat)?.soPNKHoanTat;
+    const existingPNKs = (allVouchers || [])
+      .filter((v) => v.loaiChungTu === 'PNK' && v.soChungTu)
+      .map((v) => v.soChungTu);
+
+    if (firstAssigned) {
+      setBbbgPnkInput(firstAssigned);
+    } else if (existingPNKs.length > 0) {
+      setBbbgPnkInput(existingPNKs[0]);
+    } else {
+      setBbbgPnkInput('');
+    }
+
+    setBbbgFilterTab('TAM_NHAN');
+    setShowBBBGModal(true);
+  };
+
+  const handleToggleSelectBBBGItem = (id: string) => {
+    setSelectedBBBGItemIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllPendingBBBG = () => {
+    if (!voucher) return;
+    const pendingIds = (voucher.danhSachVatTu || [])
+      .filter((it) => !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận')
+      .map((it) => it.id);
+    setSelectedBBBGItemIds(pendingIds);
+  };
+
+  const handleSelectAllBBBG = () => {
+    if (!voucher) return;
+    setSelectedBBBGItemIds((voucher.danhSachVatTu || []).map((it) => it.id));
+  };
+
+  const handleDeselectAllBBBG = () => {
+    setSelectedBBBGItemIds([]);
+  };
+
+  const handleConfirmBBBGAssign = () => {
+    if (!bbbgPnkInput.trim()) {
+      alert('Vui lòng nhập hoặc chọn Số Phiếu Nhập Kho (PNK).');
+      return;
+    }
+    if (selectedBBBGItemIds.length === 0) {
+      alert('Vui lòng tích chọn ít nhất 1 vật tư để gán PNK.');
+      return;
+    }
+
+    const trimmedPNK = bbbgPnkInput.trim();
+    const selectedSet = new Set(selectedBBBGItemIds);
+
+    const updatedItems = (voucher.danhSachVatTu || []).map((it) => {
+      if (selectedSet.has(it.id)) {
+        return {
+          ...it,
+          soPNKHoanTat: trimmedPNK,
+          trangThaiHienTai: trimmedPNK, // khi đã gán PNK chính là số PNK
+        };
+      }
+      // Số vật tư còn lại chưa gán vẫn là trạng thái "Tạm nhận" cho đến khi được gán
+      return {
+        ...it,
+        trangThaiHienTai: it.soPNKHoanTat ? it.soPNKHoanTat : 'Tạm nhận',
+      };
+    });
+
+    // BBBG sau khi hoàn thành gán PNK phần Ghi chú phiếu sẽ thêm dòng "Đã hoàn thành nhập kho đơn vị"
+    const allAssigned = updatedItems.length > 0 && updatedItems.every(
+      (it) => it.soPNKHoanTat && it.soPNKHoanTat.trim() !== '' && it.trangThaiHienTai !== 'Tạm nhận'
+    );
+
+    let newGhiChu = voucher.ghiChu || '';
+    const completedMsg = 'Đã hoàn thành nhập kho đơn vị';
+    if (allAssigned) {
+      if (!newGhiChu.includes(completedMsg)) {
+        newGhiChu = newGhiChu.trim() ? `${newGhiChu.trim()}\n${completedMsg}` : completedMsg;
+      }
+    }
+
+    const updatedVoucher: PhieuGiaoDich = {
+      ...voucher,
+      danhSachVatTu: updatedItems,
+      ghiChu: newGhiChu,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setItems(updatedItems);
+    if (onUpdateVoucher) {
+      onUpdateVoucher(updatedVoucher);
+    }
+
+    setShowBBBGModal(false);
+    setSaveToast(true);
+    setTimeout(() => setSaveToast(false), 2200);
+  };
 
   // Điều kiện kiểm tra: đã hoàn thành quá trình "cập nhật sau sửa chữa"
   // (không còn toàn bộ thiết bị ở trạng thái "Tiếp nhận mới")
@@ -265,20 +403,37 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                   <span className="sm:hidden">Cập nhật</span>
                 </button>
 
-                {/* Bổ sung nút "Nhập kho" sau khi kết thúc quá trình "cập nhật sau sửa chữa", nếu chưa hoàn thành thì không hiển thị */}
-                {hasCompletedPostRepair && (
+                {/* Đối với BBBG: Nút Gán PNK cho vật tư */}
+                {isBBBG ? (
                   <button
-                    onClick={() => {
-                      const existing = voucher.danhSachVatTu.find((i) => i.soPNKHoanTat)?.soPNKHoanTat;
-                      setPnkInput(existing || `PNK-HT-${voucher.soChungTu.replace(/[^0-9A-Za-z]/g, '') || Date.now().toString().slice(-6)}`);
-                      setShowWarehouseModal(true);
-                    }}
-                    className="h-8 px-2.5 sm:px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
-                    title="Nhập kho thiết bị & gán Số PNK hoàn tất"
+                    onClick={handleOpenBBBGModal}
+                    className={`h-8 px-2.5 sm:px-3 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs ${
+                      isBBBGCompleted ? 'bg-indigo-700 hover:bg-indigo-600' : 'bg-amber-600 hover:bg-amber-500'
+                    }`}
+                    title="Gán số PNK cho các vật tư trên BBBG sang Phiếu Nhập Kho"
                   >
                     <Warehouse className="w-3.5 h-3.5 shrink-0" />
-                    <span>Nhập kho</span>
+                    <span className="hidden sm:inline">
+                      {isBBBGCompleted ? 'Xem/Sửa gán PNK' : 'Gán PNK cho BBBG'}
+                    </span>
+                    <span className="sm:hidden">Gán PNK</span>
                   </button>
+                ) : (
+                  /* Bổ sung nút "Nhập kho" sau khi kết thúc quá trình "cập nhật sau sửa chữa", nếu chưa hoàn thành thì không hiển thị */
+                  hasCompletedPostRepair && (
+                    <button
+                      onClick={() => {
+                        const existing = voucher.danhSachVatTu.find((i) => i.soPNKHoanTat)?.soPNKHoanTat;
+                        setPnkInput(existing || `PNK-HT-${voucher.soChungTu.replace(/[^0-9A-Za-z]/g, '') || Date.now().toString().slice(-6)}`);
+                        setShowWarehouseModal(true);
+                      }}
+                      className="h-8 px-2.5 sm:px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                      title="Nhập kho thiết bị & gán Số PNK hoàn tất"
+                    >
+                      <Warehouse className="w-3.5 h-3.5 shrink-0" />
+                      <span>Nhập kho</span>
+                    </button>
+                  )
                 )}
 
                 {/* Nút tích hợp: In biên bản & Tự động xuất tệp PDF */}
@@ -552,9 +707,9 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
               {/* Tiêu đề biểu mẫu */}
               <div className="text-center py-1">
                 <h2 className="text-base sm:text-lg md:text-xl font-black uppercase text-[#004b93] tracking-wide">
-                  {voucher.loaiChungTu === 'PXK' && 'BIÊN BẢN XUẤT KHO THIẾT BỊ SỬA CHỮA'}
-                  {voucher.loaiChungTu === 'PNK' && 'BIÊN BẢN NHẬP KHO THIẾT BỊ THU HỒI'}
-                  {voucher.loaiChungTu === 'GUI_MUON' && 'BIÊN BẢN BÀN GIAO GỬI / MƯỢN THIẾT BỊ'}
+                  {voucher.loaiChungTu === 'PXK' && 'BIÊN BẢN XUẤT KHO THIẾT BỊ'}
+                  {voucher.loaiChungTu === 'PNK' && 'BIÊN BẢN NHẬP KHO THIẾT BỊ'}
+                  {(voucher.loaiChungTu === 'GUI_MUON' || (voucher.loaiChungTu as string) === 'BBBG') && 'BIÊN BẢN BÀN GIAO THIẾT BỊ'}
                 </h2>
                 <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
                   <span>Ngày lập phiếu: <strong className="text-slate-700">{formatDateVN(voucher.ngayTiepNhan)}</strong></span>
@@ -562,6 +717,48 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                   <span>Hình thức: <strong className="text-slate-700">{typeBadge.label}</strong></span>
                 </div>
               </div>
+
+              {/* Banner trạng thái tiến độ hoặc hoàn thành cho BBBG */}
+              {isBBBG && (
+                <div>
+                  {isBBBGCompleted ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                        <div>
+                          <span className="font-black text-xs sm:text-sm">ĐÃ HOÀN THÀNH NHẬP KHO ĐƠN VỊ</span>
+                          <p className="text-[11px] text-emerald-700 mt-0.5">
+                            Toàn bộ {assignedBBBGItems}/{totalBBBGItems} vật tư trên biên bản đã được gán số PNK nhập kho.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 shrink-0 print:hidden">
+                        Không kiểm đếm kho (chống trùng)
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                        <div>
+                          <span className="font-bold text-xs sm:text-sm">Tiến độ cập nhật gán PNK cho vật tư BBBG</span>
+                          <p className="text-[11px] text-amber-800 mt-0.5">
+                            Đã gán PNK: <strong className="text-emerald-700">{assignedBBBGItems}</strong> • Còn lại: <strong className="text-amber-800">{pendingBBBGItems} Tạm nhận</strong> / {totalBBBGItems} thiết bị.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleOpenBBBGModal}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs print:hidden shrink-0 transition-colors"
+                      >
+                        <Warehouse className="w-3.5 h-3.5" />
+                        <span>Gán PNK cho vật tư</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Khung thông tin chung: Đơn giản hóa khung viền theo chuẩn hành chính, không rườm rà */}
               <div className="border border-slate-300 rounded-lg p-3 bg-slate-50/50 text-xs">
@@ -978,6 +1175,246 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                   <Warehouse className="w-4 h-4" />
                   <span>Xác nhận Nhập kho</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Gán PNK cho vật tư trên BBBG */}
+        {showBBBGModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 space-y-4 border border-slate-200 max-h-[90vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+                    <Warehouse className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+                      Cập nhật gán PNK cho vật tư trên BBBG
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Gán số PNK theo từng đợt nhập kho • Vật tư chưa gán vẫn giữ trạng thái "Tạm nhận"
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowBBBGModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Progress & Overview */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs shrink-0 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Số biên bản bàn giao:</span>
+                  <span className="font-mono font-bold text-[#004b93]">{voucher.soChungTu}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tiến độ gán PNK:</span>
+                  <span className="font-bold text-slate-800">
+                    <span className="text-emerald-700">{assignedBBBGItems} đã gán PNK</span> / {totalBBBGItems} thiết bị ({pendingBBBGItems} Tạm nhận)
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Số PNK */}
+              <div className="shrink-0 space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Số Phiếu Nhập Kho (PNK) áp dụng cho các vật tư được chọn <span className="text-rose-500">*</span>:
+                </label>
+                <input
+                  type="text"
+                  value={bbbgPnkInput}
+                  onChange={(e) => setBbbgPnkInput(e.target.value)}
+                  placeholder="Ví dụ: THA-KHO28-PNK9506 hoặc PNK-HT-26-001..."
+                  className="w-full h-10 px-3 font-mono font-bold text-indigo-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  autoFocus
+                />
+                
+                {/* Gợi ý các PNK đã có trong hệ thống */}
+                {(() => {
+                  const availablePNKs = Array.from(
+                    new Set(
+                      (allVouchers || [])
+                        .filter((v) => v.loaiChungTu === 'PNK' && v.soChungTu)
+                        .map((v) => v.soChungTu)
+                    )
+                  );
+                  if (availablePNKs.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[11px] text-slate-500 font-medium">Gợi ý PNK hiện có:</span>
+                      {availablePNKs.slice(0, 5).map((pnk) => (
+                        <button
+                          key={pnk}
+                          type="button"
+                          onClick={() => setBbbgPnkInput(pnk)}
+                          className="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer transition-colors"
+                        >
+                          {pnk}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Danh sách vật tư & Thao tác chọn */}
+              <div className="flex-1 overflow-hidden flex flex-col space-y-2 min-h-0">
+                <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setBbbgFilterTab('TAM_NHAN')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                        bbbgFilterTab === 'TAM_NHAN' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Tạm nhận ({pendingBBBGItems})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBbbgFilterTab('DA_GAN')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                        bbbgFilterTab === 'DA_GAN' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Đã gán ({assignedBBBGItems})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBbbgFilterTab('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
+                        bbbgFilterTab === 'ALL' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Tất cả ({totalBBBGItems})
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllPendingBBBG}
+                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-semibold cursor-pointer"
+                    >
+                      Chọn tất cả Tạm nhận
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllBBBG}
+                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold cursor-pointer"
+                    >
+                      Chọn tất cả
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllBBBG}
+                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg cursor-pointer"
+                    >
+                      Bỏ chọn
+                    </button>
+                  </div>
+                </div>
+
+                {/* Items List Table */}
+                <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl bg-white">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="sticky top-0 bg-slate-100 text-slate-700 border-b border-slate-200 font-bold z-10">
+                      <tr>
+                        <th className="py-2 px-2.5 w-10 text-center">Chọn</th>
+                        <th className="py-2 px-2 text-center w-10">STT</th>
+                        <th className="py-2 px-3">Tên vật tư & Mã VT</th>
+                        <th className="py-2 px-3 w-40 text-left">Số Serial (S/N)</th>
+                        <th className="py-2 px-3 w-36 text-center">Trạng thái hiện tại</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(voucher.danhSachVatTu || [])
+                        .filter((it) => {
+                          if (bbbgFilterTab === 'TAM_NHAN') return !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận';
+                          if (bbbgFilterTab === 'DA_GAN') return Boolean(it.soPNKHoanTat) && it.trangThaiHienTai !== 'Tạm nhận';
+                          return true;
+                        })
+                        .map((item, idx) => {
+                          const isSelected = selectedBBBGItemIds.includes(item.id);
+                          const isAssigned = Boolean(item.soPNKHoanTat) && item.trangThaiHienTai !== 'Tạm nhận';
+                          return (
+                            <tr
+                              key={item.id}
+                              onClick={() => handleToggleSelectBBBGItem(item.id)}
+                              className={`cursor-pointer transition-colors ${
+                                isSelected ? 'bg-indigo-50/70 hover:bg-indigo-50' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <td className="py-2 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleSelectBBBGItem(item.id)}
+                                  className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                                />
+                              </td>
+                              <td className="py-2 px-2 text-center font-bold text-slate-500">
+                                {idx + 1}
+                              </td>
+                              <td className="py-2 px-3">
+                                <div className="font-bold text-slate-900 leading-snug">{item.tenVT}</div>
+                                {item.maVT && (
+                                  <span className="font-mono text-[10px] text-slate-500">Mã VT: {item.maVT}</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span className="font-mono font-bold text-red-600 bg-red-50/80 px-2 py-0.5 rounded border border-red-200">
+                                  {item.serialNumber || '—'}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                {isAssigned ? (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    PNK: {item.soPNKHoanTat}
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                    Tạm nhận
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200 shrink-0">
+                <span className="text-xs text-slate-500">
+                  Đã chọn: <b className="text-indigo-700">{selectedBBBGItemIds.length}</b> vật tư
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBBBGModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 cursor-pointer"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmBBBGAssign}
+                    disabled={!bbbgPnkInput.trim() || selectedBBBGItemIds.length === 0}
+                    className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed shadow-md"
+                  >
+                    <Warehouse className="w-4 h-4" />
+                    <span>Xác nhận gán PNK ({selectedBBBGItemIds.length})</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

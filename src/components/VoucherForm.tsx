@@ -76,6 +76,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   const [ghiChu, setGhiChu] = useState<string>(initialData?.ghiChu || '');
 
   // Detail Items State (clean blank default, no sample items)
+  const isInitialBBBG = loaiChungTu === 'BBBG' || (loaiChungTu as string) === 'GUI_MUON';
   const [danhSachVatTu, setDanhSachVatTu] = useState<ChiTietVatTu[]>(
     initialData?.danhSachVatTu && initialData.danhSachVatTu.length > 0
       ? initialData.danhSachVatTu
@@ -87,7 +88,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
             serialNumber: '',
             trangThaiSauSua: 'TOT',
             soPNKHoanTat: '',
-            trangThaiHienTai: 'Tiếp nhận mới',
+            trangThaiHienTai: isInitialBBBG ? 'Tạm nhận' : 'Tiếp nhận mới',
             ghiChuVatTu: '',
           },
         ]
@@ -108,6 +109,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       case 'PXK':
         return 'PXK-';
       case 'GUI_MUON':
+      case 'BBBG':
         return 'BBBG-';
       default:
         return 'PXK-';
@@ -170,6 +172,19 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
     const oldPrefix = getPrefix(loaiChungTu);
     const newPrefix = getPrefix(newType);
     setLoaiChungTu(newType);
+    const isNewTypeBBBG = newType === 'BBBG' || (newType as string) === 'GUI_MUON';
+    
+    // Nếu chuyển sang BBBG và các dòng hiện tại đang là "Tiếp nhận mới" chưa sửa, chuyển sang "Tạm nhận"
+    if (isNewTypeBBBG) {
+      setDanhSachVatTu((prev) =>
+        prev.map((item) =>
+          item.trangThaiHienTai === 'Tiếp nhận mới' || !item.trangThaiHienTai
+            ? { ...item, trangThaiHienTai: 'Tạm nhận' }
+            : item
+        )
+      );
+    }
+
     if (!initialData) {
       if (!soChungTu || soChungTu === oldPrefix || soChungTu === 'PXK-' || soChungTu === 'PNK-' || soChungTu === 'BBBG-') {
         setSoChungTu('');
@@ -181,6 +196,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
 
   // Item handlers
   const handleAddItem = () => {
+    const isBBBG = loaiChungTu === 'BBBG' || (loaiChungTu as string) === 'GUI_MUON';
     const newItem: ChiTietVatTu = {
       id: `vt-${Date.now()}-${danhSachVatTu.length + 1}`,
       maVT: '',
@@ -188,7 +204,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       serialNumber: '',
       trangThaiSauSua: 'TOT',
       soPNKHoanTat: '',
-      trangThaiHienTai: 'Tiếp nhận mới',
+      trangThaiHienTai: isBBBG ? 'Tạm nhận' : 'Tiếp nhận mới',
       ghiChuVatTu: '',
     };
     setDanhSachVatTu([...danhSachVatTu, newItem]);
@@ -390,7 +406,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                 >
                   <option value="PXK">Phiếu xuất kho</option>
                   <option value="PNK">Phiếu nhập kho</option>
-                  <option value="GUI_MUON">Gửi/Mượn</option>
+                  <option value="GUI_MUON">BBBG</option>
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
               </div>

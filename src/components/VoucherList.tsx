@@ -57,8 +57,15 @@ export const VoucherList: React.FC<VoucherListProps> = ({
   const filteredVouchers = vouchers
     .filter((v) => {
       // Type filter
-      if (selectedType !== 'ALL' && v.loaiChungTu !== selectedType) {
-        return false;
+      if (selectedType !== 'ALL') {
+        const isBBBG = selectedType === 'BBBG' || selectedType === 'GUI_MUON';
+        if (isBBBG) {
+          if (v.loaiChungTu !== 'GUI_MUON' && (v.loaiChungTu as string) !== 'BBBG') {
+            return false;
+          }
+        } else if (v.loaiChungTu !== selectedType) {
+          return false;
+        }
       }
 
       // Status filter
@@ -74,10 +81,12 @@ export const VoucherList: React.FC<VoucherListProps> = ({
       if (!searchTerm.trim()) return true;
 
       const term = searchTerm.toLowerCase();
+      const isSearchBBBG = term === 'bbbg' || term === 'gửi mượn' || term === 'bàn giao';
       const matchMaster =
         v.soChungTu.toLowerCase().includes(term) ||
         v.donViLienQuan.toLowerCase().includes(term) ||
         v.canBoTiepNhan.toLowerCase().includes(term) ||
+        (isSearchBBBG && (v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG')) ||
         (v.ghiChu && v.ghiChu.toLowerCase().includes(term));
 
       const matchDetail = v.danhSachVatTu.some(
@@ -147,23 +156,37 @@ export const VoucherList: React.FC<VoucherListProps> = ({
               <Filter className="w-3 h-3" /> Loại:
             </span>
             {[
-              { id: 'ALL', label: 'Tất cả' },
-              { id: 'PXK', label: 'Phiếu xuất kho' },
-              { id: 'PNK', label: 'Phiếu nhập kho' },
-              { id: 'GUI_MUON', label: 'Gửi / Mượn' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedType(tab.id)}
-                className={`px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap text-xs ${
-                  selectedType === tab.id
-                    ? 'bg-[#004b93] text-white font-bold'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+              { id: 'ALL', label: 'Tất cả', count: vouchers.length },
+              { id: 'PXK', label: 'Phiếu xuất kho', count: vouchers.filter((v) => v.loaiChungTu === 'PXK').length },
+              { id: 'PNK', label: 'Phiếu nhập kho', count: vouchers.filter((v) => v.loaiChungTu === 'PNK').length },
+              {
+                id: 'BBBG',
+                label: 'BBBG',
+                count: vouchers.filter((v) => v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG').length,
+              },
+            ].map((tab) => {
+              const isSelected = selectedType === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedType(tab.id)}
+                  className={`px-2.5 py-1.5 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap text-xs flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-[#004b93] text-white font-bold'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-semibold ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Right Action buttons */}
@@ -174,6 +197,7 @@ export const VoucherList: React.FC<VoucherListProps> = ({
               className="text-xs bg-slate-100 border border-slate-300 rounded-lg px-2 py-1.5 text-slate-700 focus:outline-none"
             >
               <option value="ALL">Tất cả trạng thái</option>
+              <option value="Tạm nhận">Tạm nhận (BBBG)</option>
               <option value="Tiếp nhận mới">Tiếp nhận mới</option>
               <option value="NK tốt">NK tốt</option>
               <option value="NK hỏng">NK hỏng</option>
@@ -306,10 +330,48 @@ export const VoucherList: React.FC<VoucherListProps> = ({
 
                     {/* Status Sync Badges */}
                     {(() => {
+                      const isBBBG = voucher.loaiChungTu === 'GUI_MUON' || (voucher.loaiChungTu as string) === 'BBBG';
+                      const isCompletedBBBG = isBBBG && (
+                        Boolean(voucher.ghiChu && voucher.ghiChu.includes('Đã hoàn thành nhập kho đơn vị')) ||
+                        (voucher.danhSachVatTu.length > 0 && voucher.danhSachVatTu.every((i) => i.soPNKHoanTat && i.trangThaiHienTai !== 'Tạm nhận'))
+                      );
+
+                      if (isBBBG) {
+                        const nDaGan = voucher.danhSachVatTu.filter((i) => Boolean(i.soPNKHoanTat) && i.trangThaiHienTai !== 'Tạm nhận').length;
+                        const nTamNhan = voucher.danhSachVatTu.filter((i) => !i.soPNKHoanTat || i.trangThaiHienTai === 'Tạm nhận').length;
+
+                        return (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {isCompletedBBBG ? (
+                              <>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                  ✓ Đã hoàn thành nhập kho đơn vị
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200" title="Không kiểm đếm kho để chống trùng lặp">
+                                  Không đếm kho
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  Đang gán PNK: {nDaGan}/{totalItems} ({nTamNhan} Tạm nhận)
+                                </span>
+                                {nDaGan > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    Đã có PNK
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+
                       const nTot = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'NK tốt').length;
                       const nHong = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'NK hỏng').length;
                       const nKTT = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa').length;
                       const nMoi = voucher.danhSachVatTu.filter((i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới').length;
+                      const nTamNhan = voucher.danhSachVatTu.filter((i) => i.trangThaiHienTai === 'Tạm nhận').length;
 
                       return (
                         <div className="flex flex-wrap items-center gap-1">
@@ -328,9 +390,14 @@ export const VoucherList: React.FC<VoucherListProps> = ({
                               Kiểm tra thêm: {nKTT}
                             </span>
                           )}
+                          {nTamNhan > 0 && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                              Tạm nhận: {nTamNhan}
+                            </span>
+                          )}
                           {nMoi > 0 && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                              {nTot === 0 && nHong === 0 && nKTT === 0 ? 'Tiếp nhận mới' : `Tiếp nhận mới: ${nMoi}`}
+                              {nTot === 0 && nHong === 0 && nKTT === 0 && nTamNhan === 0 ? 'Tiếp nhận mới' : `Tiếp nhận mới: ${nMoi}`}
                             </span>
                           )}
                           {(() => {
