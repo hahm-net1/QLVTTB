@@ -38,7 +38,7 @@ import {
   TRANG_THAI_HIEN_TAI_OPTIONS 
 } from '../constants/sampleData';
 import { loadVouchers } from '../utils/storage';
-import { getAllPendingBBBGItems } from '../utils/equipmentMatcher';
+import { getAllPendingBBBGItems, isBBBGCompleted } from '../utils/equipmentMatcher';
 import { EquipmentCatalogModal } from './EquipmentCatalogModal';
 import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { BBBGIntakeModal } from './BBBGIntakeModal';
@@ -164,46 +164,80 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   };
 
   // Helper check duplicate equipment:
-  // "Cảnh báo đối với những vật tư bị trùng mã VT + tên thiết bị/vật tư + số serial"
+  // Nghiệp vụ kiểm tra trùng lặp vật tư theo Serial (Vòng đời vật tư: Tiếp nhận mới -> NK tốt/NK hỏng -> Nhập kho tái sử dụng nhiều lần)
+  // 1. Cho phép một Serial xuất hiện trong nhiều phiếu nhập/BBBG khác nhau theo thời gian (tạo lịch sử vòng đời), không báo lỗi trùng lặp mã serial nữa.
+  // 2. Chỉ cảnh báo/chặn khi Serial đó đang trong trạng thái chưa hoàn thành quy trình trước đó (ví dụ: đang ở trong BBBG có trạng thái chưa "Hoàn thành nhập kho đơn vị", hoặc đang ở trạng thái "Tiếp nhận mới").
+  // 3. Trên cùng 1 form BBBG hoặc PNK/PXK cảnh báo/chặn khi Serial và Tên VT cùng trùng lặp đồng thời.
+  // 4. Cập nhật trạng thái vật tư linh hoạt theo từng chu kỳ nhập mới.
   const getDuplicateInfo = (index: number) => {
     const item = danhSachVatTu[index];
-    const ma = (item.maVT || '').trim().toLowerCase();
     const ten = (item.tenVT || '').trim().toLowerCase();
     const sn = (item.serialNumber || '').trim().toUpperCase();
 
-    // Chỉ kiểm tra khi đã nhập đầy đủ hoặc có dữ liệu cốt lõi
-    if (!ma || !ten || !sn) {
+    // Nếu không có Serial, không kiểm tra trùng lặp theo Serial
+    if (!sn) {
       return { isDuplicate: false, sameLines: [], otherVouchers: [] };
     }
 
-    // 1. Trùng lặp trong cùng phiếu hiện tại
+    // 1. Trùng lặp trên cùng 1 form BBBG hoặc PNK/PXK:
+    // Cảnh báo/chặn khi Serial và Tên VT cùng trùng lặp đồng thời
     const sameLines: number[] = [];
-    danhSachVatTu.forEach((other, oIdx) => {
-      if (oIdx !== index) {
-        const oMa = (other.maVT || '').trim().toLowerCase();
-        const oTen = (other.tenVT || '').trim().toLowerCase();
-        const oSn = (other.serialNumber || '').trim().toUpperCase();
-        if (oMa === ma && oTen === ten && oSn === sn) {
-          sameLines.push(oIdx + 1);
+    if (ten) {
+      danhSachVatTu.forEach((other, oIdx) => {
+        if (oIdx !== index) {
+          const oTen = (other.tenVT || '').trim().toLowerCase();
+          const oSn = (other.serialNumber || '').trim().toUpperCase();
+          if (oSn === sn && oTen === ten) {
+            sameLines.push(oIdx + 1);
+          }
         }
-      }
-    });
+      });
+    }
 
-    // 2. Trùng lặp với các phiếu khác đã có trên hệ thống
+    // 2. Kiểm tra với các phiếu khác trên hệ thống (tạo lịch sử vòng đời theo thời gian):
+    // Chỉ cảnh báo/chặn khi Serial đó đang trong trạng thái CHƯA HOÀN THÀNH quy trình trước đó:
+    // - Đang ở trong BBBG có trạng thái chưa "Hoàn thành nhập kho đơn vị" (hoặc vật tư còn đang "Tạm nhận", chưa gán PNK)
+    // - Hoặc đang ở trạng thái "Tiếp nhận mới" (chưa hoàn tất nhập kho / sửa chữa)
     const allVouchers = existingVouchers || loadVouchers();
-    const otherVouchers: { soChungTu: string; ngayTiepNhan: string }[] = [];
+    const otherVouchers: { soChungTu: string; ngayTiepNhan: string; lyDo: string }[] = [];
 
     allVouchers.forEach((v: PhieuGiaoDich) => {
       if (initialData && v.id === initialData.id) return;
-      const match = v.danhSachVatTu.some((other: ChiTietVatTu) => {
-        const oMa = (other.maVT || '').trim().toLowerCase();
-        const oTen = (other.tenVT || '').trim().toLowerCase();
+
+      const isVoucherBBBG = v.loaiChungTu === 'BBBG' || (v.loaiChungTu as string) === 'GUI_MUON';
+      const isBBBGDone = isBBBGCompleted(v) || Boolean(v.ghiChu && v.ghiChu.includes('Đã hoàn thành nhập kho đơn vị'));
+
+      v.danhSachVatTu.forEach((other: ChiTietVatTu) => {
         const oSn = (other.serialNumber || '').trim().toUpperCase();
-        return oMa === ma && oTen === ten && oSn === sn;
+        if (oSn !== sn) return;
+
+        let isIncomplete = false;
+        let lyDo = '';
+
+        if (isVoucherBBBG) {
+          const isAssigned = other.trangThaiHienTai === 'Đã gán' && Boolean(other.soPNKHoanTat && other.soPNKHoanTat.trim() !== '');
+          if (!isBBBGDone || !isAssigned || other.trangThaiHienTai === 'Tạm nhận') {
+            isIncomplete = true;
+            lyDo = 'BBBG chưa hoàn thành nhập kho đơn vị';
+          }
+        } else {
+          const st = (other.trangThaiHienTai || '').trim();
+          if (!st || st === 'Tiếp nhận mới' || st === 'Đang sửa chữa' || st === 'Kiểm tra thêm' || st === 'DANG_SUA_CHUA') {
+            isIncomplete = true;
+            lyDo = `Đang ở trạng thái "${st || 'Tiếp nhận mới'}"`;
+          }
+        }
+
+        if (isIncomplete) {
+          if (!otherVouchers.some((ov) => ov.soChungTu === v.soChungTu)) {
+            otherVouchers.push({
+              soChungTu: v.soChungTu,
+              ngayTiepNhan: v.ngayTiepNhan,
+              lyDo,
+            });
+          }
+        }
       });
-      if (match) {
-        otherVouchers.push({ soChungTu: v.soChungTu, ngayTiepNhan: v.ngayTiepNhan });
-      }
     });
 
     const isDuplicate = sameLines.length > 0 || otherVouchers.length > 0;
@@ -315,16 +349,27 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       return;
     }
 
-    // Kiểm tra và cảnh báo nếu có thiết bị bị trùng thông tin (Mã VT + Tên VT + Serial)
+    // Kiểm tra và cảnh báo nếu có thiết bị bị trùng thông tin theo nghiệp vụ vòng đời Serial
     const duplicateList = danhSachVatTu
-      .map((_, i) => ({ index: i, info: getDuplicateInfo(i) }))
+      .map((_, i) => ({ index: i, item: danhSachVatTu[i], info: getDuplicateInfo(i) }))
       .filter((d) => d.info.isDuplicate);
 
     if (duplicateList.length > 0) {
-      const dupLineText = duplicateList.map((d) => `#${d.index + 1}`).join(', ');
+      const dupDetails = duplicateList.map((d) => {
+        const label = `#${d.index + 1} (${d.item.tenVT || 'Chưa có tên'} - S/N: ${d.item.serialNumber})`;
+        if (d.info.sameLines.length > 0) {
+          return `${label}: Trùng đồng thời Serial và Tên VT với dòng #${d.info.sameLines.join(', #')} trên cùng form`;
+        }
+        if (d.info.otherVouchers.length > 0) {
+          const vNames = d.info.otherVouchers.map((v) => `${v.soChungTu} (${v.lyDo})`).join(', ');
+          return `${label}: Serial đang chưa hoàn thành quy trình trước đó tại: ${vNames}`;
+        }
+        return label;
+      }).join('\n• ');
+
       const confirmSave = window.confirm(
-        `⚠️ CẢNH BÁO TRÙNG LẶP VẬT TƯ:\n\n` +
-        `Có ${duplicateList.length} thiết bị (dòng ${dupLineText}) bị trùng thông tin (Mã VT + Tên VT + Số Serial).\n\n` +
+        `⚠️ CẢNH BÁO TRÙNG LẶP VẬT TƯ / SERIAL:\n\n` +
+        `Có ${duplicateList.length} thiết bị có cảnh báo trùng lặp:\n• ${dupDetails}\n\n` +
         `Bạn có chắc chắn muốn tiếp tục lưu phiếu này không?`
       );
       if (!confirmSave) {
@@ -629,9 +674,9 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                 <div>
-                  <span className="font-bold">Cảnh báo trùng lặp thiết bị: </span>
+                  <span className="font-bold">Cảnh báo trùng lặp vật tư / Serial: </span>
                   <span>
-                    Phát hiện <b>{duplicateItemsCount}</b> thiết bị bị trùng cả 3 thông tin <i>(Mã VT + Tên VT + Số Serial)</i>.
+                    Phát hiện <b>{duplicateItemsCount}</b> thiết bị có cảnh báo (trùng đồng thời Serial & Tên VT trên cùng form, hoặc Serial đang chưa hoàn thành quy trình ở phiếu trước đó).
                   </span>
                 </div>
               </div>
@@ -678,7 +723,13 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                                 {index + 1}
                               </span>
                               {dupInfo.isDuplicate && (
-                                <span title={`Trùng thông tin với dòng #${dupInfo.sameLines.join(', #')}`}>
+                                <span
+                                  title={
+                                    dupInfo.sameLines.length > 0
+                                      ? `Trùng đồng thời Serial và Tên VT với dòng #${dupInfo.sameLines.join(', #')} trên cùng form`
+                                      : `Serial đang chưa hoàn thành quy trình tại: ${dupInfo.otherVouchers.map((v) => `${v.soChungTu} (${v.lyDo})`).join(', ')}`
+                                  }
+                                >
                                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                                 </span>
                               )}
