@@ -206,9 +206,7 @@ export const BBBGIntakeModal: React.FC<BBBGIntakeModalProps> = ({
           ...found.item,
           soPNKHoanTat: '', // Số PNK là đầu vào khởi tạo phiếu mới (soChungTu), không phải "Số PNK hoàn tất" (đầu ra sau sửa chữa)
           trangThaiHienTai: 'Tiếp nhận mới', // Người dùng yêu cầu: sau khi gán số PNK trường "Trạng thái" tại phiếu nhập mới là "Tiếp nhận mới"
-          ghiChuVatTu: found.item.ghiChuVatTu
-            ? `${found.item.ghiChuVatTu} (Từ BBBG: ${found.soBBBG})`
-            : `Từ BBBG: ${found.soBBBG}`,
+          ghiChuVatTu: found.item.ghiChuVatTu || '', // Tuyệt đối không tự động điền, chỉ ghi nội dung do người dùng nhập vào
         });
       }
     });

@@ -281,9 +281,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
       id: `vt-${Date.now()}-${idx}`,
       soPNKHoanTat: '', // Số PNK là đầu vào khởi tạo phiếu mới (soChungTu), không phải "Số PNK hoàn tất" (đầu ra sau sửa chữa)
       trangThaiHienTai: 'Tiếp nhận mới', // Trường "Trạng thái" tại phiếu nhập kho mới lúc này sẽ là "Tiếp nhận mới"
-      ghiChuVatTu: it.ghiChuVatTu
-        ? `${it.ghiChuVatTu} (Từ BBBG: ${voucher.soChungTu})`
-        : `Từ BBBG: ${voucher.soChungTu}`,
+      ghiChuVatTu: it.ghiChuVatTu || '', // Tuyệt đối không tự động điền, chỉ ghi nội dung do người dùng nhập vào
     }));
 
     // Kiểm tra xem phiếu nhập kho này đã có sẵn trên hệ thống hay chưa
@@ -918,7 +916,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                 <h2 className="text-base sm:text-lg md:text-xl font-black uppercase text-[#004b93] tracking-wide">
                   {voucher.loaiChungTu === 'PXK' && 'BIÊN BẢN XUẤT KHO THIẾT BỊ'}
                   {voucher.loaiChungTu === 'PNK' && 'BIÊN BẢN NHẬP KHO THIẾT BỊ'}
-                  {(voucher.loaiChungTu === 'GUI_MUON' || (voucher.loaiChungTu as string) === 'BBBG') && 'BIÊN BẢN BÀN GIAO THIẾT BỊ'}
+                  {(voucher.loaiChungTu === 'GUI_MUON' || (voucher.loaiChungTu as string) === 'BBBG') && 'BIÊN BẢN BÀN GIAO THIẾT BỊ (BBBG)'}
                 </h2>
                 <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
                   <span>Ngày lập phiếu: <strong className="text-slate-700">{formatDateVN(voucher.ngayTiepNhan)}</strong></span>

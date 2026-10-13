@@ -500,13 +500,13 @@ Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
                       Loại chứng từ:
                     </span>
                     <select
-                      value={extractedResult.loaiChungTu || 'PXK'}
+                      value={extractedResult.loaiChungTu === 'GUI_MUON' ? 'BBBG' : (extractedResult.loaiChungTu || 'PXK')}
                       onChange={(e) => setExtractedResult({ ...extractedResult, loaiChungTu: e.target.value as any })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-[#004b93] text-xs focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
                     >
                       <option value="PNK">Phiếu nhập kho (PNK - Ký hiệu: /N/)</option>
                       <option value="PXK">Phiếu xuất kho (PXK - Ký hiệu: /X/)</option>
-                      <option value="GUI_MUON">BBBG / Bàn giao (BBBG)</option>
+                      <option value="BBBG">BBBG</option>
                     </select>
                   </div>
                   <div className="mt-2 text-[11px] text-slate-500">

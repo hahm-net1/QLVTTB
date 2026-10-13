@@ -8,7 +8,7 @@ export function getLoaiChungTuLabel(type: LoaiChungTu): string {
       return 'Phiếu nhập kho';
     case 'GUI_MUON':
     case 'BBBG':
-      return 'Biên bản bàn giao (BBBG)';
+      return 'BBBG';
     default:
       return type;
   }

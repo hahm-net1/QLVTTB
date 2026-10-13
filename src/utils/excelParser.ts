@@ -61,8 +61,8 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
       result.loaiChungTu = 'PXK';
     } else if (/phiếu\s*nhập\s*kho|\bPNK\b|\/N\//i.test(rowStr)) {
       result.loaiChungTu = 'PNK';
-    } else if (/mượn|gửi/i.test(rowStr)) {
-      result.loaiChungTu = 'GUI_MUON';
+    } else if (/mượn|gửi|bàn\s*giao|bbbg/i.test(rowStr)) {
+      result.loaiChungTu = 'BBBG';
     }
 
     // Tìm Ngày tháng

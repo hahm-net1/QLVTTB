@@ -101,10 +101,18 @@ export const VoucherList: React.FC<VoucherListProps> = ({
     })
     .sort((a, b) => {
       if (sortBy === 'date_desc') {
-        return new Date(b.ngayTiepNhan).getTime() - new Date(a.ngayTiepNhan).getTime();
+        const timeDiff = new Date(b.ngayTiepNhan).getTime() - new Date(a.ngayTiepNhan).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
       }
       if (sortBy === 'date_asc') {
-        return new Date(a.ngayTiepNhan).getTime() - new Date(b.ngayTiepNhan).getTime();
+        const timeDiff = new Date(a.ngayTiepNhan).getTime() - new Date(b.ngayTiepNhan).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return timeA - timeB;
       }
       return a.soChungTu.localeCompare(b.soChungTu);
     });

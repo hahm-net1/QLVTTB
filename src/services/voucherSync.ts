@@ -50,6 +50,13 @@ export function subscribeToCloudVouchers(
 }
 
 /**
+ * Helper to strip undefined values so Firestore WriteBatch doesn't reject document
+ */
+function sanitizeForFirestore<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data));
+}
+
+/**
  * Save or update a voucher in Firestore.
  */
 export async function saveVoucherToCloud(voucher: PhieuGiaoDich): Promise<void> {
@@ -60,7 +67,7 @@ export async function saveVoucherToCloud(voucher: PhieuGiaoDich): Promise<void> 
     updatedAt: now,
     createdAt: voucher.createdAt || now,
   };
-  await setDoc(docRef, payload, { merge: true });
+  await setDoc(docRef, sanitizeForFirestore(payload), { merge: true });
 }
 
 /**
@@ -77,7 +84,7 @@ export async function saveMultipleVouchersToCloud(vouchers: PhieuGiaoDich[]): Pr
       updatedAt: now,
       createdAt: v.createdAt || now,
     };
-    batch.set(docRef, payload, { merge: true });
+    batch.set(docRef, sanitizeForFirestore(payload), { merge: true });
   });
   await batch.commit();
 }

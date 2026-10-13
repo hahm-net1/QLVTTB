@@ -363,7 +363,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               <span className="font-bold text-emerald-700">{countPNK} phiếu</span>
             </div>
             <div className="flex justify-between">
-              <span>BBBG thiết bị:</span>
+              <span>BBBG:</span>
               <span className="font-bold text-amber-700">
                 {countGM} phiếu {countCompletedBBBG > 0 && `(${countCompletedBBBG} đã hoàn thành gán PNK)`}
               </span>

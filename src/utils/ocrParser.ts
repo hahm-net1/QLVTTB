@@ -72,8 +72,8 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
         result.loaiChungTu = 'PNK';
       } else if (upperText.includes('PHIẾU XUẤT KHO') || upperText.includes('PXK') || upperText.includes('XUẤT KHO')) {
         result.loaiChungTu = 'PXK';
-      } else if (upperText.includes('GỬI') || upperText.includes('MƯỢN') || upperText.includes('GM-') || upperText.includes('BBBG')) {
-        result.loaiChungTu = 'GUI_MUON';
+      } else if (upperText.includes('GỬI') || upperText.includes('MƯỢN') || upperText.includes('GM-') || upperText.includes('BBBG') || upperText.includes('BÀN GIAO')) {
+        result.loaiChungTu = 'BBBG';
       } else {
         result.loaiChungTu = 'PXK';
       }

@@ -124,7 +124,6 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
           'Số chứng từ',
           'Loại phiếu',
           'Ngày tiếp nhận',
-          'Đơn vị liên quan',
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
@@ -138,7 +137,6 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
           'Số chứng từ',
           'Loại phiếu',
           'Ngày tiếp nhận',
-          'Đơn vị liên quan',
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
@@ -153,14 +151,14 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
 
   vouchers.forEach((v) => {
     const isVoucherBBBG = v.loaiChungTu === 'BBBG' || (v.loaiChungTu as string) === 'GUI_MUON';
+    const loaiPhieuText = isVoucherBBBG ? 'BBBG' : v.loaiChungTu;
     if (v.danhSachVatTu.length === 0) {
       rows.push(
         isOnlyBBBG
           ? [
               v.soChungTu,
-              v.loaiChungTu,
+              loaiPhieuText,
               v.ngayTiepNhan,
-              v.donViLienQuan,
               v.canBoTiepNhan,
               '',
               '',
@@ -172,9 +170,8 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
             ]
           : [
               v.soChungTu,
-              v.loaiChungTu,
+              loaiPhieuText,
               v.ngayTiepNhan,
-              v.donViLienQuan,
               v.canBoTiepNhan,
               '',
               '',
@@ -192,9 +189,8 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
           isOnlyBBBG
             ? [
                 v.soChungTu,
-                v.loaiChungTu,
+                loaiPhieuText,
                 v.ngayTiepNhan,
-                v.donViLienQuan,
                 v.canBoTiepNhan,
                 item.maVT,
                 item.tenVT,
@@ -206,9 +202,8 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
               ]
             : [
                 v.soChungTu,
-                v.loaiChungTu,
+                loaiPhieuText,
                 v.ngayTiepNhan,
-                v.donViLienQuan,
                 v.canBoTiepNhan,
                 item.maVT,
                 item.tenVT,
@@ -253,6 +248,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
 
 export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
   const isBBBG = voucher.loaiChungTu === 'BBBG' || (voucher.loaiChungTu as string) === 'GUI_MUON';
+  const loaiPhieuText = isBBBG ? 'BBBG' : voucher.loaiChungTu;
   const pnkHeader = isBBBG ? 'Số PNK' : 'Số PNK hoàn tất';
 
   const rows: string[][] = [
@@ -261,7 +257,6 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
           'Số chứng từ',
           'Loại phiếu',
           'Ngày tiếp nhận',
-          'Đơn vị liên quan',
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
@@ -275,7 +270,6 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
           'Số chứng từ',
           'Loại phiếu',
           'Ngày tiếp nhận',
-          'Đơn vị liên quan',
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
@@ -293,9 +287,8 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
       isBBBG
         ? [
             voucher.soChungTu,
-            voucher.loaiChungTu,
+            loaiPhieuText,
             voucher.ngayTiepNhan,
-            voucher.donViLienQuan,
             voucher.canBoTiepNhan,
             '',
             '',
@@ -307,9 +300,8 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
           ]
         : [
             voucher.soChungTu,
-            voucher.loaiChungTu,
+            loaiPhieuText,
             voucher.ngayTiepNhan,
-            voucher.donViLienQuan,
             voucher.canBoTiepNhan,
             '',
             '',
@@ -327,9 +319,8 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
         isBBBG
           ? [
               voucher.soChungTu,
-              voucher.loaiChungTu,
+              loaiPhieuText,
               voucher.ngayTiepNhan,
-              voucher.donViLienQuan,
               voucher.canBoTiepNhan,
               item.maVT,
               item.tenVT,
@@ -341,9 +332,8 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
             ]
           : [
               voucher.soChungTu,
-              voucher.loaiChungTu,
+              loaiPhieuText,
               voucher.ngayTiepNhan,
-              voucher.donViLienQuan,
               voucher.canBoTiepNhan,
               item.maVT,
               item.tenVT,

@@ -541,13 +541,13 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
               </label>
               <div className="relative">
                 <select
-                  value={loaiChungTu}
+                  value={loaiChungTu === 'GUI_MUON' ? 'BBBG' : loaiChungTu}
                   onChange={(e) => handleTypeChange(e.target.value as LoaiChungTu)}
                   className="w-full h-11 px-3.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00a3e0] appearance-none"
                 >
                   <option value="PXK">Phiếu xuất kho</option>
                   <option value="PNK">Phiếu nhập kho</option>
-                  <option value="GUI_MUON">BBBG</option>
+                  <option value="BBBG">BBBG</option>
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3.5 pointer-events-none" />
               </div>
