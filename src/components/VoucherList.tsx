@@ -19,12 +19,14 @@ import {
   Download,
   ChevronRight,
   Package,
-  Warehouse
+  Warehouse,
+  Clock
 } from 'lucide-react';
 import { PhieuGiaoDich, LoaiChungTu } from '../types';
 import { 
   getLoaiChungTuBadge, 
   formatDateVN, 
+  formatDateTimeVN,
   getTrangThaiSauSuaBadge 
 } from '../utils/formatters';
 
@@ -50,8 +52,32 @@ export const VoucherList: React.FC<VoucherListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
-  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'code'>('date_desc');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [voucherToDelete, setVoucherToDelete] = useState<PhieuGiaoDich | null>(null);
+
+  // Helper lấy timestamp thời điểm nhập phiếu vào hệ thống
+  const getVoucherEntryTimestamp = (v: PhieuGiaoDich): number => {
+    if (v.createdAt) {
+      const t = new Date(v.createdAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    const match = v.id?.match(/\d{10,}/);
+    if (match) {
+      const t = Number(match[0]);
+      if (!isNaN(t) && t > 1000000000000) return t;
+    }
+    if (v.updatedAt) {
+      const t = new Date(v.updatedAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    if (v.ngayTiepNhan) {
+      const t = new Date(v.ngayTiepNhan).getTime();
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  };
 
   // Filter logic
   const filteredVouchers = vouchers
@@ -77,6 +103,30 @@ export const VoucherList: React.FC<VoucherListProps> = ({
         if (!hasStatus) return false;
       }
 
+      // Date range filter (Chọn theo khoảng thời gian)
+      if (startDate || endDate) {
+        const getLocalDateStr = (isoOrDate?: string) => {
+          if (!isoOrDate) return '';
+          if (isoOrDate.length === 10 && isoOrDate.includes('-')) return isoOrDate;
+          const d = new Date(isoOrDate);
+          if (isNaN(d.getTime())) return '';
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        };
+        const createdDate = getLocalDateStr(v.createdAt);
+        const receiptDate = v.ngayTiepNhan || '';
+        const matchRange = (d: string) => {
+          if (!d) return false;
+          if (startDate && d < startDate) return false;
+          if (endDate && d > endDate) return false;
+          return true;
+        };
+        const isInRange = (createdDate && matchRange(createdDate)) || (receiptDate && matchRange(receiptDate));
+        if (!isInRange) return false;
+      }
+
       // Search term
       if (!searchTerm.trim()) return true;
 
@@ -100,21 +150,12 @@ export const VoucherList: React.FC<VoucherListProps> = ({
       return matchMaster || matchDetail;
     })
     .sort((a, b) => {
-      if (sortBy === 'date_desc') {
-        const timeDiff = new Date(b.ngayTiepNhan).getTime() - new Date(a.ngayTiepNhan).getTime();
-        if (timeDiff !== 0) return timeDiff;
-        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      const timeA = getVoucherEntryTimestamp(a);
+      const timeB = getVoucherEntryTimestamp(b);
+      if (sortBy === 'newest') {
         return timeB - timeA;
       }
-      if (sortBy === 'date_asc') {
-        const timeDiff = new Date(a.ngayTiepNhan).getTime() - new Date(b.ngayTiepNhan).getTime();
-        if (timeDiff !== 0) return timeDiff;
-        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-        return timeA - timeB;
-      }
-      return a.soChungTu.localeCompare(b.soChungTu);
+      return timeA - timeB;
     });
 
   const handleDeleteConfirm = (voucher: PhieuGiaoDich, e: React.MouseEvent) => {
@@ -225,6 +266,66 @@ export const VoucherList: React.FC<VoucherListProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Sắp xếp theo thời điểm nhập & Chọn theo khoảng thời gian */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 bg-slate-50/80 p-2.5 rounded-xl">
+          {/* Options lựa chọn: mới nhất - cũ nhất, cũ nhất - mới nhất */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-bold text-slate-600 flex items-center gap-1 shrink-0">
+              <ArrowUpDown className="w-3.5 h-3.5 text-[#004b93]" />
+              Sắp xếp:
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest')}
+              className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-[#004b93] text-xs focus:outline-none focus:ring-1 focus:ring-[#00a3e0] cursor-pointer shadow-2xs"
+            >
+              <option value="newest">Mới nhất → Cũ nhất</option>
+              <option value="oldest">Cũ nhất → Mới nhất</option>
+            </select>
+          </div>
+
+          {/* Chọn theo khoảng thời gian */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-slate-600 flex items-center gap-1 shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              Khoảng thời gian:
+            </span>
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-2xs">
+              <span className="text-[11px] text-slate-400">Từ:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="text-xs text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-2xs">
+              <span className="text-[11px] text-slate-400">Đến:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="text-xs text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+              />
+            </div>
+
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
+                title="Xóa bộ lọc khoảng thời gian"
+              >
+                <X className="w-3 h-3" />
+                <span>Xóa lọc</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* List Header Count */}
@@ -280,10 +381,10 @@ export const VoucherList: React.FC<VoucherListProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[11px] sm:text-xs text-slate-400 flex items-center gap-1 mr-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {formatDateVN(voucher.ngayTiepNhan)}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[11px] sm:text-xs text-slate-600 font-medium flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200" title="Thời điểm nhập vào hệ thống">
+                      <Clock className="w-3.5 h-3.5 text-[#004b93]" />
+                      <span>{formatDateTimeVN(voucher.createdAt || voucher.updatedAt || voucher.ngayTiepNhan)}</span>
                     </span>
 
                     {/* Quick actions on card */}

@@ -100,6 +100,18 @@ export function formatDateVN(dateStr: string): string {
   return dateStr;
 }
 
+export function formatDateTimeVN(isoOrDateStr?: string): string {
+  if (!isoOrDateStr) return '';
+  const d = new Date(isoOrDateStr);
+  if (isNaN(d.getTime())) return isoOrDateStr;
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${hours}:${minutes} ${day}/${month}/${year}`;
+}
+
 export function getItemStatusBadge(status: string): { label: string; bg: string; text: string; border: string } {
   if (status && (status.startsWith('PNK-') || status.startsWith('PNK') || status.includes('/N/'))) {
     return {

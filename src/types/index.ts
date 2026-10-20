@@ -13,6 +13,7 @@ export interface ChiTietVatTu {
   soPNKHoanTat: string;
   trangThaiHienTai: string; // Có thể chọn preset hoặc nhập tự do
   ghiChuVatTu?: string;
+  updatedAt?: string;
 }
 
 export interface PhieuGiaoDich {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BarChart3, 
   CheckCircle2, 
@@ -11,7 +11,14 @@ import {
   FileText,
   TrendingUp,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Calendar,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Cpu,
+  X,
+  Filter
 } from 'lucide-react';
 import { PhieuGiaoDich } from '../types';
 
@@ -22,12 +29,20 @@ interface DashboardStatsProps {
   onNewVoucher: () => void;
 }
 
+type TimeGroupingMode = 'day' | 'week' | 'month' | 'year';
+
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
   vouchers,
   onExportCSV,
   onExportJSON,
   onNewVoucher,
 }) => {
+  // State thống kê card sau sửa theo thời gian
+  const [timeMode, setTimeMode] = useState<TimeGroupingMode>('day');
+  const [statsStartDate, setStatsStartDate] = useState<string>('');
+  const [statsEndDate, setStatsEndDate] = useState<string>('');
+  const [expandedPeriodKey, setExpandedPeriodKey] = useState<string | null>(null);
+
   // Compute metrics
   const totalVouchers = vouchers.length;
 
@@ -140,6 +155,199 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
+  // -------------------------------------------------------------
+  // THỐNG KÊ SỐ CARD THEO THỜI GIAN
+  // (theo ngày, theo tuần, theo tháng, theo năm)
+  // -------------------------------------------------------------
+  const postRepairCards = useMemo(() => {
+    const list: Array<{
+      id: string;
+      soChungTu: string;
+      loaiChungTu: string;
+      maVT: string;
+      tenVT: string;
+      serialNumber: string;
+      trangThaiSauSua: string;
+      trangThaiHienTai: string;
+      timestamp: number;
+      dateStr: string;
+      formattedTime: string;
+    }> = [];
+
+    vouchers.forEach((v) => {
+      (v.danhSachVatTu || []).forEach((it) => {
+        const isPostRepair =
+          it.trangThaiHienTai === 'NK tốt' ||
+          it.trangThaiHienTai === 'NK hỏng' ||
+          it.trangThaiHienTai === 'Kiểm tra thêm' ||
+          it.trangThaiHienTai === 'Đang sửa chữa' ||
+          (Boolean(it.trangThaiSauSua) && it.trangThaiHienTai !== 'Tiếp nhận mới' && it.trangThaiHienTai !== 'Tạm nhận' && it.trangThaiHienTai !== 'Đã gán');
+
+        if (isPostRepair) {
+          const rawTime = it.updatedAt || v.updatedAt || v.createdAt || v.ngayTiepNhan;
+          let d: Date;
+          if (rawTime && rawTime.length === 10 && rawTime.includes('-')) {
+            const [y, m, day] = rawTime.split('-').map(Number);
+            d = new Date(y, m - 1, day, 12, 0, 0);
+          } else if (rawTime) {
+            d = new Date(rawTime);
+            if (isNaN(d.getTime())) d = new Date();
+          } else {
+            d = new Date();
+          }
+
+          const timestamp = d.getTime();
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const dateStr = `${y}-${m}-${day}`;
+          const hours = String(d.getHours()).padStart(2, '0');
+          const minutes = String(d.getMinutes()).padStart(2, '0');
+          const formattedTime = `${hours}:${minutes} ${day}/${m}/${y}`;
+
+          list.push({
+            id: it.id,
+            soChungTu: v.soChungTu,
+            loaiChungTu: v.loaiChungTu,
+            maVT: it.maVT || '',
+            tenVT: it.tenVT || 'Thiết bị viễn thông',
+            serialNumber: it.serialNumber || '',
+            trangThaiSauSua: it.trangThaiSauSua || (it.trangThaiHienTai === 'NK tốt' ? 'TOT' : it.trangThaiHienTai === 'NK hỏng' ? 'HONG' : 'LOI'),
+            trangThaiHienTai: it.trangThaiHienTai,
+            timestamp,
+            dateStr,
+            formattedTime,
+          });
+        }
+      });
+    });
+
+    return list;
+  }, [vouchers]);
+
+  // Lọc theo khoảng thời gian nếu người dùng chọn
+  const filteredPostRepairCards = useMemo(() => {
+    return postRepairCards.filter((card) => {
+      if (statsStartDate && card.dateStr < statsStartDate) return false;
+      if (statsEndDate && card.dateStr > statsEndDate) return false;
+      return true;
+    });
+  }, [postRepairCards, statsStartDate, statsEndDate]);
+
+  // Gom nhóm thống kê theo: ngày, tuần, tháng, năm
+  const timeGroupedStats = useMemo(() => {
+    interface PeriodBucket {
+      key: string;
+      label: string;
+      subLabel: string;
+      sortTime: number;
+      total: number;
+      tot: number;
+      hong: number;
+      ktt: number;
+      cards: typeof filteredPostRepairCards;
+    }
+
+    const map: Record<string, PeriodBucket> = {};
+
+    filteredPostRepairCards.forEach((card) => {
+      const d = new Date(card.timestamp);
+      let key = '';
+      let label = '';
+      let subLabel = '';
+      let sortTime = 0;
+
+      if (timeMode === 'day') {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        key = `${year}-${month}-${day}`;
+        label = `Ngày ${day}/${month}/${year}`;
+        subLabel = `${day}/${month}/${year}`;
+        sortTime = new Date(year, d.getMonth(), d.getDate()).getTime();
+      } else if (timeMode === 'week') {
+        const dayOfWeek = (d.getDay() + 6) % 7; // Monday = 0
+        const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek);
+        const sunday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek + 6);
+
+        const mDay = String(monday.getDate()).padStart(2, '0');
+        const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+        const mYear = monday.getFullYear();
+
+        const sDay = String(sunday.getDate()).padStart(2, '0');
+        const sMonth = String(sunday.getMonth() + 1).padStart(2, '0');
+        const sYear = sunday.getFullYear();
+
+        const target = new Date(monday.valueOf());
+        target.setDate(target.getDate() + 3);
+        const firstThursday = target.valueOf();
+        target.setMonth(0, 1);
+        if (target.getDay() !== 4) {
+          target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+        }
+        const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+
+        key = `${mYear}-W${String(weekNum).padStart(2, '0')}`;
+        label = `Tuần ${weekNum} (${mYear})`;
+        subLabel = `Từ ${mDay}/${mMonth}/${mYear} đến ${sDay}/${sMonth}/${sYear}`;
+        sortTime = monday.getTime();
+      } else if (timeMode === 'month') {
+        const year = d.getFullYear();
+        const month = d.getMonth() + 1;
+        key = `${year}-${String(month).padStart(2, '0')}`;
+        label = `Tháng ${String(month).padStart(2, '0')}/${year}`;
+        subLabel = `Tháng ${month} năm ${year}`;
+        sortTime = new Date(year, d.getMonth(), 1).getTime();
+      } else {
+        // year
+        const year = d.getFullYear();
+        key = `${year}`;
+        label = `Năm ${year}`;
+        subLabel = `Cả năm ${year}`;
+        sortTime = new Date(year, 0, 1).getTime();
+      }
+
+      if (!map[key]) {
+        map[key] = {
+          key,
+          label,
+          subLabel,
+          sortTime,
+          total: 0,
+          tot: 0,
+          hong: 0,
+          ktt: 0,
+          cards: [],
+        };
+      }
+
+      map[key].total += 1;
+      const isTot = card.trangThaiHienTai === 'NK tốt' || card.trangThaiSauSua === 'TOT';
+      const isHong = card.trangThaiHienTai === 'NK hỏng' || card.trangThaiSauSua === 'HONG';
+      if (isTot) {
+        map[key].tot += 1;
+      } else if (isHong) {
+        map[key].hong += 1;
+      } else {
+        map[key].ktt += 1;
+      }
+      map[key].cards.push(card);
+    });
+
+    return Object.values(map)
+      .map((bucket) => ({
+        ...bucket,
+        cards: bucket.cards.sort((a, b) => b.timestamp - a.timestamp),
+      }))
+      .sort((a, b) => b.sortTime - a.sortTime);
+  }, [filteredPostRepairCards, timeMode]);
+
+  const totalCardsUpdated = filteredPostRepairCards.length;
+  const totalCardsTot = filteredPostRepairCards.filter((c) => c.trangThaiHienTai === 'NK tốt' || c.trangThaiSauSua === 'TOT').length;
+  const totalCardsHong = filteredPostRepairCards.filter((c) => c.trangThaiHienTai === 'NK hỏng' || c.trangThaiSauSua === 'HONG').length;
+  const totalCardsKTT = filteredPostRepairCards.filter((c) => c.trangThaiHienTai !== 'NK tốt' && c.trangThaiSauSua !== 'TOT' && c.trangThaiHienTai !== 'NK hỏng' && c.trangThaiSauSua !== 'HONG').length;
+  const pctCardsTot = totalCardsUpdated > 0 ? Math.round((totalCardsTot / totalCardsUpdated) * 100) : 0;
+
   return (
     <div className="max-w-6xl mx-auto space-y-5 pb-24">
       {/* Top Banner */}
@@ -217,6 +425,255 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             <p className="text-[10px] text-slate-500 font-semibold">{countNKHong} hỏng, {countKTT} kiểm tra thêm</p>
           </div>
         </div>
+      </div>
+
+      {/* THỐNG KÊ SỐ CARD THEO THỜI GIAN */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        {/* Header & Mode Switcher */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
+              <Cpu className="w-4 h-4 sm:w-5 sm:h-5 text-[#004b93]" />
+              Thống kê số card theo thời gian
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Theo dõi số lượng card/thiết bị được cập nhật kết quả kiểm thử & sau sửa chữa theo ngày, theo tuần, theo tháng, theo năm
+            </p>
+          </div>
+
+          {/* Time Grouping Selector: Theo ngày, theo tuần, theo tháng, theo năm */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl self-start md:self-center">
+            {[
+              { id: 'day', label: 'Theo ngày' },
+              { id: 'week', label: 'Theo tuần' },
+              { id: 'month', label: 'Theo tháng' },
+              { id: 'year', label: 'Theo năm' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setTimeMode(mode.id as TimeGroupingMode)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  timeMode === mode.id
+                    ? 'bg-[#004b93] text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Filter bar: Khoảng thời gian & Quick Metrics */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-semibold text-slate-600 flex items-center gap-1 shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-[#004b93]" />
+              Khoảng thời gian:
+            </span>
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-2xs">
+              <span className="text-[11px] text-slate-400">Từ:</span>
+              <input
+                type="date"
+                value={statsStartDate}
+                onChange={(e) => setStatsStartDate(e.target.value)}
+                className="text-xs text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+              />
+            </div>
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-2xs">
+              <span className="text-[11px] text-slate-400">Đến:</span>
+              <input
+                type="date"
+                value={statsEndDate}
+                onChange={(e) => setStatsEndDate(e.target.value)}
+                className="text-xs text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+              />
+            </div>
+            {(statsStartDate || statsEndDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStatsStartDate('');
+                  setStatsEndDate('');
+                }}
+                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
+                title="Xóa bộ lọc khoảng thời gian"
+              >
+                <X className="w-3 h-3" />
+                <span>Xóa lọc</span>
+              </button>
+            )}
+          </div>
+
+          {/* Quick Metrics Badges for Card Post-Repair */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="px-2.5 py-1 bg-blue-50 text-[#004b93] border border-blue-200 rounded-lg font-bold flex items-center gap-1.5">
+              <span>Tổng card:</span>
+              <span className="font-mono text-sm">{totalCardsUpdated}</span>
+            </span>
+            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg font-bold flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Tốt:</span>
+              <span className="font-mono">{totalCardsTot} ({pctCardsTot}%)</span>
+            </span>
+            <span className="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold flex items-center gap-1.5">
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Hỏng:</span>
+              <span className="font-mono">{totalCardsHong}</span>
+            </span>
+            {totalCardsKTT > 0 && (
+              <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Kiểm tra thêm:</span>
+                <span className="font-mono">{totalCardsKTT}</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Time-grouped stats list */}
+        {timeGroupedStats.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+            Không có card nào được cập nhật trạng thái sau sửa trong khoảng thời gian này.
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {timeGroupedStats.map((bucket) => {
+              const isExpanded = expandedPeriodKey === bucket.key;
+              const pctBucketTot = bucket.total > 0 ? Math.round((bucket.tot / bucket.total) * 100) : 0;
+              return (
+                <div
+                  key={bucket.key}
+                  className="border border-slate-200 rounded-xl bg-white overflow-hidden transition-all shadow-2xs"
+                >
+                  {/* Period Header Row */}
+                  <div
+                    onClick={() => setExpandedPeriodKey(isExpanded ? null : bucket.key)}
+                    className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-50 text-[#004b93] font-bold flex items-center justify-center shrink-0">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-800 flex flex-wrap items-center gap-2">
+                          <span>{bucket.label}</span>
+                          <span className="text-[11px] font-semibold text-slate-500 font-mono">({bucket.subLabel})</span>
+                        </h4>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs font-extrabold text-[#004b93]">
+                            {bucket.total} card đã cập nhật
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold rounded-md border border-emerald-200">
+                          {bucket.tot} Đạt ({pctBucketTot}%)
+                        </span>
+                        {bucket.hong > 0 && (
+                          <span className="px-2 py-0.5 bg-rose-50 text-rose-700 font-bold rounded-md border border-rose-200">
+                            {bucket.hong} Hỏng
+                          </span>
+                        )}
+                        {bucket.ktt > 0 && (
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-700 font-bold rounded-md border border-amber-200">
+                            {bucket.ktt} KT thêm
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                        title={isExpanded ? 'Thu gọn danh sách card' : 'Xem danh sách card chi tiết'}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-slate-600" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-slate-600" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Card Detail Table */}
+                  {isExpanded && (
+                    <div className="border-t border-slate-100 bg-slate-50/60 p-3 animate-in fade-in">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-slate-500 font-semibold">
+                              <th className="py-2 px-2.5 w-10 text-center">STT</th>
+                              <th className="py-2 px-2.5">Số Serial</th>
+                              <th className="py-2 px-2.5">Tên thiết bị / Mã VT</th>
+                              <th className="py-2 px-2.5">Số phiếu</th>
+                              <th className="py-2 px-2.5 text-center">Trạng thái sau sửa</th>
+                              <th className="py-2 px-2.5 text-right">Thời điểm cập nhật</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {bucket.cards.map((c, idx) => {
+                              const isTot = c.trangThaiHienTai === 'NK tốt' || c.trangThaiSauSua === 'TOT';
+                              const isHong = c.trangThaiHienTai === 'NK hỏng' || c.trangThaiSauSua === 'HONG';
+                              return (
+                                <tr key={`${c.id}-${idx}`} className="hover:bg-white/80 transition-colors">
+                                  <td className="py-2 px-2.5 text-center font-mono text-slate-400 text-[11px]">
+                                    {idx + 1}
+                                  </td>
+                                  <td className="py-2 px-2.5">
+                                    <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-xs">
+                                      {c.serialNumber || 'N/A'}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2.5 min-w-[180px]">
+                                    <div className="font-semibold text-slate-800">{c.tenVT}</div>
+                                    {c.maVT && (
+                                      <div className="text-[10px] font-mono text-slate-400">{c.maVT}</div>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-2.5">
+                                    <span className="font-mono text-xs font-semibold text-[#004b93]">
+                                      {c.soChungTu}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2.5 text-center">
+                                    {isTot ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                        <span>Tốt ({c.trangThaiHienTai})</span>
+                                      </span>
+                                    ) : isHong ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                        <XCircle className="w-3 h-3 text-rose-600" />
+                                        <span>Hỏng ({c.trangThaiHienTai})</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                        <span>{c.trangThaiHienTai || 'Kiểm tra thêm'}</span>
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right font-mono text-slate-500 text-[11px]">
+                                    {c.formattedTime}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Middle Grid: Repair Quality & Workflow status */}

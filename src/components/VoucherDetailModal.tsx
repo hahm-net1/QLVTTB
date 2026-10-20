@@ -478,10 +478,16 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
   };
 
   const handleSaveStatusUpdate = () => {
+    const now = new Date().toISOString();
+    const updatedItems = items.map((it) => ({
+      ...it,
+      updatedAt: now,
+    }));
+
     const updatedVoucher: PhieuGiaoDich = {
       ...voucher,
-      danhSachVatTu: items,
-      updatedAt: new Date().toISOString(),
+      danhSachVatTu: updatedItems,
+      updatedAt: now,
     };
 
     if (onUpdateVoucher) {
