@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
   Layers, 
@@ -19,8 +19,10 @@ import {
   Hash,
   ChevronDown,
   Info,
-  Warehouse
+  Warehouse,
+  Lock
 } from 'lucide-react';
+import { usePrivateVault } from '../context/PrivateVaultContext';
 import { 
   PhieuGiaoDich, 
   ChiTietVatTu, 
@@ -80,6 +82,8 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   );
   const [ghiChu, setGhiChu] = useState<string>(initialData?.ghiChu || '');
 
+  const { isUnlocked, activePin, encryptNote, decryptNote } = usePrivateVault();
+
   // Detail Items State (clean blank default, no sample items)
   const isInitialBBBG = loaiChungTu === 'BBBG' || (loaiChungTu as string) === 'GUI_MUON';
   const [danhSachVatTu, setDanhSachVatTu] = useState<ChiTietVatTu[]>(
@@ -95,9 +99,31 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
             soPNKHoanTat: '',
             trangThaiHienTai: isInitialBBBG ? 'Tạm nhận' : 'Tiếp nhận mới',
             ghiChuVatTu: '',
+            privateNote: '',
           },
         ]
   );
+
+  // Automatically decrypt encrypted private notes when unlocked
+  useEffect(() => {
+    if (isUnlocked && activePin && initialData?.danhSachVatTu) {
+      let hasEncrypted = false;
+      const promises = initialData.danhSachVatTu.map(async (it) => {
+        if (it.privateNote && it.privateNote.startsWith('ENC1:')) {
+          hasEncrypted = true;
+          const plain = await decryptNote(it.privateNote);
+          return { ...it, privateNote: plain || '' };
+        }
+        return it;
+      });
+
+      if (hasEncrypted) {
+        Promise.all(promises).then((decryptedList) => {
+          setDanhSachVatTu(decryptedList);
+        });
+      }
+    }
+  }, [isUnlocked, activePin, initialData, decryptNote]);
 
   // Modals state
   const [catalogModalIndex, setCatalogModalIndex] = useState<number | null>(null);
@@ -321,7 +347,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
     setDanhSachVatTu(updated);
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const errors: string[] = [];
 
@@ -379,6 +405,29 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
 
     setFormErrors([]);
 
+    // Xử lý mã hóa Private Note nếu đang ở chế độ mở khóa bảo mật
+    let finalDanhSachVatTu = danhSachVatTu;
+    if (isUnlocked && activePin) {
+      finalDanhSachVatTu = await Promise.all(
+        danhSachVatTu.map(async (item) => {
+          if (item.privateNote && item.privateNote.trim()) {
+            const cipher = await encryptNote(item.privateNote.trim());
+            return { ...item, privateNote: cipher };
+          }
+          return { ...item, privateNote: '' };
+        })
+      );
+    } else {
+      // Giữ nguyên ghi chú đã mã hóa trước đó nếu người dùng khác sửa phiếu ở chế độ khóa
+      finalDanhSachVatTu = danhSachVatTu.map((item) => {
+        const prev = initialData?.danhSachVatTu?.find((old) => old.id === item.id);
+        return {
+          ...item,
+          privateNote: prev?.privateNote || item.privateNote || '',
+        };
+      });
+    }
+
     const payload: PhieuGiaoDich = {
       id: initialData?.id || `phieu-${Date.now()}`,
       soChungTu: soChungTu.trim(),
@@ -387,7 +436,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       donViLienQuan: initialData?.donViLienQuan || donViLienQuan.trim() || 'Chờ phân bổ sau sửa chữa',
       canBoTiepNhan: canBoTiepNhan.trim(),
       ghiChu: ghiChu.trim(),
-      danhSachVatTu,
+      danhSachVatTu: finalDanhSachVatTu,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -696,6 +745,14 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                       </th>
                       <th className="py-2.5 px-3 w-40 sm:w-44">Mã VT</th>
                       <th className="py-2.5 px-3 w-48 sm:w-56 text-left">Số Serial (S/N)</th>
+                      {isUnlocked && (
+                        <th className="py-2.5 px-3 w-56 text-left text-indigo-700 font-bold">
+                          <div className="flex items-center gap-1">
+                            <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Ghi chú riêng tư</span>
+                          </div>
+                        </th>
+                      )}
                       <th className="py-2.5 px-2.5 w-20 text-center">Thao tác</th>
                     </tr>
                   </thead>
@@ -776,6 +833,19 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                               }`}
                             />
                           </td>
+
+                          {/* Ghi chú riêng tư: CHỈ HIỂN THỊ KHI ĐÃ MỞ KHÓA BẢO MẬT */}
+                          {isUnlocked && (
+                            <td className="py-2 px-3">
+                              <input
+                                type="text"
+                                value={item.privateNote || ''}
+                                onChange={(e) => handleUpdateItem(index, 'privateNote', e.target.value)}
+                                placeholder="Ghi chú riêng tư (sẽ mã hóa AES-256)..."
+                                className="w-full h-8.5 px-2.5 bg-indigo-50/50 border border-indigo-200 rounded-lg text-xs font-medium text-indigo-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 placeholder:text-indigo-300"
+                              />
+                            </td>
+                          )}
 
                           {/* Thao tác: Sao chép & Xóa */}
                           <td className="py-2 px-2.5 text-center whitespace-nowrap">

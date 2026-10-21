@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { VoucherForm } from './components/VoucherForm';
 import { VoucherList } from './components/VoucherList';
 import { DashboardStats } from './components/DashboardStats';
 import { SmartScanModal } from './components/SmartScanModal';
 import { VoucherDetailModal } from './components/VoucherDetailModal';
+import { PrivateVaultProvider, usePrivateVault } from './context/PrivateVaultContext';
 import { 
   loadVouchers, 
   saveVouchers,
@@ -37,7 +38,23 @@ import {
   Cloud
 } from 'lucide-react';
 
-export default function App() {
+function MainApp() {
+  const { openStealthModal } = usePrivateVault();
+  const footerClickRef = useRef(0);
+  const footerTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleFooterSecretClick = () => {
+    footerClickRef.current += 1;
+    if (footerTimerRef.current) clearTimeout(footerTimerRef.current);
+    if (footerClickRef.current >= 5) {
+      footerClickRef.current = 0;
+      openStealthModal();
+      return;
+    }
+    footerTimerRef.current = setTimeout(() => {
+      footerClickRef.current = 0;
+    }, 2000);
+  };
   const [activeTab, setActiveTab] = useState<'form' | 'list' | 'stats'>('list');
   const [vouchers, setVouchers] = useState<PhieuGiaoDich[]>([]);
   const [editingVoucher, setEditingVoucher] = useState<PhieuGiaoDich | null>(null);
@@ -333,7 +350,13 @@ export default function App() {
             <span>Hệ thống Quản lý Thiết bị, Vật tư & Sửa chữa</span>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-slate-400">
-            <span>XVT-Hahm</span>
+            <span 
+              onClick={handleFooterSecretClick}
+              className="select-none cursor-pointer hover:text-slate-600 transition-colors"
+              title="QLVT"
+            >
+              XVT-Hahm
+            </span>
             <button
               onClick={handleResetSampleData}
               className="text-[#004b93] hover:underline cursor-pointer"
@@ -363,5 +386,13 @@ export default function App() {
         onUpdateMultipleVouchers={handleSaveMultipleVouchers}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <PrivateVaultProvider>
+      <MainApp />
+    </PrivateVaultProvider>
   );
 }

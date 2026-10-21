@@ -13,6 +13,7 @@ export interface ChiTietVatTu {
   soPNKHoanTat: string;
   trangThaiHienTai: string; // Có thể chọn preset hoặc nhập tự do
   ghiChuVatTu?: string;
+  privateNote?: string; // Ghi chú riêng tư (mã hóa client-side với mã PIN của người dùng khi lưu Firestore)
   updatedAt?: string;
 }
 
@@ -24,6 +25,7 @@ export interface PhieuGiaoDich {
   donViLienQuan: string;
   canBoTiepNhan: string;
   ghiChu: string;
+  privateNote?: string; // Ghi chú riêng tư cấp phiếu (nếu có)
   danhSachVatTu: ChiTietVatTu[];
   createdAt: string;
   updatedAt: string;

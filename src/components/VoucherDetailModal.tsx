@@ -18,8 +18,10 @@ import {
   Loader2,
   Upload,
   FileSpreadsheet,
-  MoreVertical
+  MoreVertical,
+  Lock
 } from 'lucide-react';
+import { usePrivateVault } from '../context/PrivateVaultContext';
 import { PhieuGiaoDich, ChiTietVatTu, TrangThaiSauSua } from '../types';
 import { 
   getLoaiChungTuBadge, 
@@ -89,6 +91,9 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
     };
   }, [showOverflowMenu]);
 
+  const { isUnlocked, activePin, encryptNote, decryptNote } = usePrivateVault();
+  const [decryptedNotes, setDecryptedNotes] = useState<Record<string, string>>({});
+
   useEffect(() => {
     if (voucher) {
       setItems(voucher.danhSachVatTu || []);
@@ -96,6 +101,26 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
       setShowOverflowMenu(false);
     }
   }, [voucher]);
+
+  // Decrypt notes when unlocked
+  useEffect(() => {
+    if (isUnlocked && activePin && voucher?.danhSachVatTu) {
+      const map: Record<string, string> = {};
+      const promises = voucher.danhSachVatTu.map(async (it) => {
+        if (it.privateNote) {
+          const plain = await decryptNote(it.privateNote);
+          map[it.id] = plain || '';
+        } else {
+          map[it.id] = '';
+        }
+      });
+      Promise.all(promises).then(() => {
+        setDecryptedNotes(map);
+      });
+    } else {
+      setDecryptedNotes({});
+    }
+  }, [voucher, isUnlocked, activePin, decryptNote]);
 
   if (!voucher) return null;
 
@@ -477,12 +502,25 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
     setItems(updated);
   };
 
-  const handleSaveStatusUpdate = () => {
+  const handleSaveStatusUpdate = async () => {
     const now = new Date().toISOString();
-    const updatedItems = items.map((it) => ({
+    let updatedItems = items.map((it) => ({
       ...it,
       updatedAt: now,
     }));
+
+    if (isUnlocked && activePin) {
+      updatedItems = await Promise.all(
+        updatedItems.map(async (it) => {
+          const plain = decryptedNotes[it.id];
+          if (plain !== undefined) {
+            const cipher = plain.trim() ? await encryptNote(plain.trim()) : '';
+            return { ...it, privateNote: cipher };
+          }
+          return it;
+        })
+      );
+    }
 
     const updatedVoucher: PhieuGiaoDich = {
       ...voucher,
@@ -768,6 +806,14 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                           <th className="py-2 px-3 w-52 text-left">Serial (S/N)</th>
                           <th className="py-2 px-3 w-56 text-center">Trạng thái sau sửa</th>
                           <th className="py-2 px-3">Ghi chú sau sửa chữa</th>
+                          {isUnlocked && (
+                            <th className="py-2 px-3 w-56 text-indigo-700 font-bold">
+                              <div className="flex items-center gap-1">
+                                <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Ghi chú riêng tư</span>
+                              </div>
+                            </th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs">
@@ -859,6 +905,23 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                                 className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-[#00a3e0] focus:ring-1 focus:ring-[#00a3e0]"
                               />
                             </td>
+
+                            {/* Ô ghi chú riêng tư (Chỉ hiển thị khi đã mở khóa bảo mật) */}
+                            {isUnlocked && (
+                              <td className="py-2 px-3">
+                                <input
+                                  type="text"
+                                  value={decryptedNotes[item.id] !== undefined ? decryptedNotes[item.id] : ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDecryptedNotes((prev) => ({ ...prev, [item.id]: val }));
+                                    setIsUpdatingStatus(true);
+                                  }}
+                                  placeholder="Ghi chú riêng tư (sẽ mã hóa)..."
+                                  className="w-full h-8 px-2.5 bg-indigo-50/50 border border-indigo-200 rounded-lg text-xs font-medium text-indigo-900 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 placeholder:text-indigo-300"
+                                />
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -1108,6 +1171,13 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                             Ghi chú: {item.ghiChuVatTu}
                           </div>
                         )}
+
+                        {isUnlocked && decryptedNotes[item.id] && (
+                          <div className="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 p-2 rounded-lg flex items-start gap-1.5 font-medium">
+                            <Lock className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                            <span>Ghi chú riêng: {decryptedNotes[item.id]}</span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1148,6 +1218,12 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                                 <span className="block text-[10px] text-slate-400 font-normal italic mt-0.5">
                                   Ghi chú: {item.ghiChuVatTu}
                                 </span>
+                              )}
+                              {isUnlocked && decryptedNotes[item.id] && (
+                                <div className="mt-1 text-[11px] text-indigo-700 font-medium flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                                  <Lock className="w-3 h-3 text-indigo-600 shrink-0" />
+                                  <span>Ghi chú riêng: {decryptedNotes[item.id]}</span>
+                                </div>
                               )}
                             </td>
                             {/* Serial Number: font to và màu đỏ nổi bật */}

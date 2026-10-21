@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart3, 
   CheckCircle2, 
@@ -18,9 +18,14 @@ import {
   ChevronUp,
   Cpu,
   X,
-  Filter
+  Filter,
+  Lock,
+  KeyRound,
+  ShieldCheck,
+  Search
 } from 'lucide-react';
 import { PhieuGiaoDich } from '../types';
+import { usePrivateVault } from '../context/PrivateVaultContext';
 
 interface DashboardStatsProps {
   vouchers: PhieuGiaoDich[];
@@ -31,12 +36,34 @@ interface DashboardStatsProps {
 
 type TimeGroupingMode = 'day' | 'week' | 'month' | 'year';
 
+interface PrivateItemRecord {
+  itemId: string;
+  voucherId: string;
+  soChungTu: string;
+  loaiChungTu: string;
+  ngayTiepNhan: string;
+  donViLienQuan: string;
+  maVT: string;
+  tenVT: string;
+  serialNumber: string;
+  trangThaiSauSua: string;
+  trangThaiHienTai: string;
+  plainNote: string;
+}
+
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
   vouchers,
   onExportCSV,
   onExportJSON,
   onNewVoucher,
 }) => {
+  const { isUnlocked, activePin, decryptNote, lockVault } = usePrivateVault();
+
+  // State thống kê cá nhân (Ghi chú riêng tư)
+  const [privateRecords, setPrivateRecords] = useState<PrivateItemRecord[]>([]);
+  const [privateSearch, setPrivateSearch] = useState<string>('');
+  const [privateStatusFilter, setPrivateStatusFilter] = useState<'ALL' | 'TOT' | 'HONG' | 'LOI'>('ALL');
+
   // State thống kê card sau sửa theo thời gian
   const [timeMode, setTimeMode] = useState<TimeGroupingMode>('day');
   const [statsStartDate, setStatsStartDate] = useState<string>('');
@@ -348,6 +375,96 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const totalCardsKTT = filteredPostRepairCards.filter((c) => c.trangThaiHienTai !== 'NK tốt' && c.trangThaiSauSua !== 'TOT' && c.trangThaiHienTai !== 'NK hỏng' && c.trangThaiSauSua !== 'HONG').length;
   const pctCardsTot = totalCardsUpdated > 0 ? Math.round((totalCardsTot / totalCardsUpdated) * 100) : 0;
 
+  // Giải mã các ghi chú riêng tư khi mở khóa bảo mật
+  useEffect(() => {
+    if (!isUnlocked || !activePin) {
+      setPrivateRecords([]);
+      return;
+    }
+
+    let isMounted = true;
+    const loadPrivateRecords = async () => {
+      const list: PrivateItemRecord[] = [];
+      for (const v of vouchers) {
+        for (const it of (v.danhSachVatTu || [])) {
+          if (it.privateNote && it.privateNote.trim()) {
+            const plain = await decryptNote(it.privateNote);
+            if (plain) {
+              list.push({
+                itemId: it.id,
+                voucherId: v.id,
+                soChungTu: v.soChungTu,
+                loaiChungTu: v.loaiChungTu,
+                ngayTiepNhan: v.ngayTiepNhan,
+                donViLienQuan: v.donViLienQuan,
+                maVT: it.maVT || '',
+                tenVT: it.tenVT || '',
+                serialNumber: it.serialNumber || '',
+                trangThaiSauSua: it.trangThaiSauSua,
+                trangThaiHienTai: it.trangThaiHienTai || '',
+                plainNote: plain,
+              });
+            }
+          }
+        }
+      }
+      if (isMounted) {
+        setPrivateRecords(list);
+      }
+    };
+
+    loadPrivateRecords();
+    return () => {
+      isMounted = false;
+    };
+  }, [vouchers, isUnlocked, activePin, decryptNote]);
+
+  // Bộ lọc danh sách ghi chú riêng tư cá nhân
+  const filteredPrivateRecords = useMemo(() => {
+    return privateRecords.filter((rec) => {
+      if (privateStatusFilter !== 'ALL' && rec.trangThaiSauSua !== privateStatusFilter) {
+        return false;
+      }
+      if (!privateSearch.trim()) return true;
+      const q = privateSearch.toLowerCase();
+      return (
+        rec.serialNumber.toLowerCase().includes(q) ||
+        rec.tenVT.toLowerCase().includes(q) ||
+        rec.maVT.toLowerCase().includes(q) ||
+        rec.soChungTu.toLowerCase().includes(q) ||
+        rec.plainNote.toLowerCase().includes(q) ||
+        rec.donViLienQuan.toLowerCase().includes(q)
+      );
+    });
+  }, [privateRecords, privateSearch, privateStatusFilter]);
+
+  const privateCountTot = privateRecords.filter((r) => r.trangThaiSauSua === 'TOT').length;
+  const privateCountHong = privateRecords.filter((r) => r.trangThaiSauSua === 'HONG').length;
+  const privateCountLoi = privateRecords.filter((r) => r.trangThaiSauSua === 'LOI').length;
+
+  const handleExportPrivateCSV = () => {
+    if (privateRecords.length === 0) return;
+    const headers = ['STT', 'Số chứng từ', 'Ngày lập', 'Đơn vị', 'Mã VT', 'Tên thiết bị', 'Số Serial', 'Trạng thái', 'Ghi chú riêng tư'];
+    const rows = privateRecords.map((r, i) => [
+      i + 1,
+      `"${r.soChungTu}"`,
+      `"${r.ngayTiepNhan}"`,
+      `"${r.donViLienQuan}"`,
+      `"${r.maVT}"`,
+      `"${r.tenVT}"`,
+      `"${r.serialNumber}"`,
+      `"${r.trangThaiSauSua}"`,
+      `"${r.plainNote.replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Thong_ke_Ghi_chu_rieng_tu_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-5 pb-24">
       {/* Top Banner */}
@@ -379,6 +496,188 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
           </button>
         </div>
       </div>
+
+      {/* THỐNG KÊ CÁ NHÂN: GHI CHÚ RIÊNG TƯ (CHỈ HIỂN THỊ KHI ĐÃ MỞ KHÓA BẢO MẬT) */}
+      {isUnlocked && (
+        <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white p-5 sm:p-6 rounded-3xl shadow-xl border border-indigo-500/30 space-y-5 animate-in fade-in duration-300">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-500/20">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
+                <KeyRound className="w-5 h-5 text-indigo-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold text-white">
+                    Thống kê cá nhân • Ghi chú riêng tư
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Đã giải mã AES-256</span>
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-200 mt-0.5">
+                  Tổng hợp danh mục vật tư & card được gắn ghi chú bảo mật cá nhân
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={handleExportPrivateCSV}
+                disabled={privateRecords.length === 0}
+                className="px-3 py-1.5 bg-indigo-800/80 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-semibold rounded-xl border border-indigo-400/30 flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Xuất CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={lockVault}
+                className="px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-xs font-semibold rounded-xl border border-rose-500/30 flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                title="Khóa ngay và ẩn toàn bộ ghi chú"
+              >
+                <Lock className="w-3.5 h-3.5 text-rose-300" />
+                <span>Khóa ngay</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Metric Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-indigo-200 uppercase">Có ghi chú riêng</p>
+              <h4 className="text-xl sm:text-2xl font-black text-white mt-1">{privateRecords.length}</h4>
+              <p className="text-[10px] text-indigo-300">Tổng số vật tư ghi chú</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-emerald-300 uppercase">Trạng thái Tốt</p>
+              <h4 className="text-xl sm:text-2xl font-black text-emerald-400 mt-1">{privateCountTot}</h4>
+              <p className="text-[10px] text-emerald-200">Đạt chuẩn sau sửa</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-rose-300 uppercase">Trạng thái Hỏng</p>
+              <h4 className="text-xl sm:text-2xl font-black text-rose-400 mt-1">{privateCountHong}</h4>
+              <p className="text-[10px] text-rose-200">Không đạt chuẩn</p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-amber-300 uppercase">Trạng thái Lỗi / Khác</p>
+              <h4 className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{privateCountLoi}</h4>
+              <p className="text-[10px] text-amber-200">Cần kiểm tra thêm</p>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-black/20 p-2.5 rounded-2xl border border-white/5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-indigo-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={privateSearch}
+                onChange={(e) => setPrivateSearch(e.target.value)}
+                placeholder="Tìm nhanh theo Serial, Tên VT, Mã VT, Số phiếu, Ghi chú riêng..."
+                className="w-full pl-9 pr-3 py-2 bg-white/10 border border-white/10 rounded-xl text-xs text-white placeholder:text-indigo-300/70 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white/15 transition-all"
+              />
+              {privateSearch && (
+                <button
+                  type="button"
+                  onClick={() => setPrivateSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 self-end sm:self-center">
+              {(['ALL', 'TOT', 'HONG', 'LOI'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setPrivateStatusFilter(st)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    privateStatusFilter === st
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'bg-white/5 text-indigo-200 hover:bg-white/10'
+                  }`}
+                >
+                  {st === 'ALL' ? 'Tất cả' : st === 'TOT' ? 'Tốt' : st === 'HONG' ? 'Hỏng' : 'Lỗi'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
+            <div className="overflow-x-auto max-h-[420px]">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="sticky top-0 bg-slate-950/90 backdrop-blur-xs text-indigo-200 font-bold uppercase text-[11px] border-b border-white/10">
+                  <tr>
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3 w-32">Số phiếu</th>
+                    <th className="py-2.5 px-3 w-32">Ngày lập</th>
+                    <th className="py-2.5 px-3 w-40">Mã & Tên VT</th>
+                    <th className="py-2.5 px-3 w-40">Số Serial (S/N)</th>
+                    <th className="py-2.5 px-3 w-28 text-center">Trạng thái</th>
+                    <th className="py-2.5 px-3">Ghi chú riêng tư (Đã giải mã)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filteredPrivateRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-indigo-200/70 text-xs italic">
+                        {privateRecords.length === 0
+                          ? 'Chưa có vật tư nào được lưu kèm Ghi chú riêng tư. Bạn có thể mở phiếu để thêm ghi chú riêng bất cứ lúc nào.'
+                          : 'Không tìm thấy vật tư nào khớp với từ khóa tìm kiếm.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPrivateRecords.map((rec, i) => (
+                      <tr key={rec.itemId} className="hover:bg-white/5 transition-colors">
+                        <td className="py-2.5 px-3 text-center text-indigo-300 font-bold">{i + 1}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-cyan-300">{rec.soChungTu}</td>
+                        <td className="py-2.5 px-3 text-indigo-200">{rec.ngayTiepNhan}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-white">{rec.tenVT}</div>
+                          {rec.maVT && <span className="font-mono text-[10px] text-indigo-300">Mã: {rec.maVT}</span>}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-mono font-bold text-rose-300 bg-rose-950/40 border border-rose-500/30 px-2 py-0.5 rounded">
+                            {rec.serialNumber || '—'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
+                              rec.trangThaiSauSua === 'TOT'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : rec.trangThaiSauSua === 'HONG'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}
+                          >
+                            {rec.trangThaiSauSua === 'TOT' ? 'Tốt' : rec.trangThaiSauSua === 'HONG' ? 'Hỏng' : 'Lỗi'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-1.5 bg-indigo-900/40 border border-indigo-400/30 text-indigo-100 px-2.5 py-1.5 rounded-xl font-medium">
+                            <Lock className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                            <span>{rec.plainNote}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4 Quick Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

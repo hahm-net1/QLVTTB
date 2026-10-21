@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { 
   FileText, 
   PlusCircle, 
@@ -7,8 +7,11 @@ import {
   Layers, 
   FileSpreadsheet, 
   Sparkles,
-  Cloud
+  Cloud,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
+import { usePrivateVault } from '../context/PrivateVaultContext';
 
 interface HeaderProps {
   activeTab: 'form' | 'list' | 'stats';
@@ -28,6 +31,25 @@ export const Header: React.FC<HeaderProps> = ({
   onExportCSV,
   totalCount,
 }) => {
+  const { isUnlocked, openStealthModal, lockVault } = usePrivateVault();
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleBrandSecretClick = () => {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+    }
+    if (clickCountRef.current >= 5) {
+      clickCountRef.current = 0;
+      openStealthModal();
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 2000);
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-[#004b93] text-white shadow-md border-b border-[#003870]">
       {/* Top Brand Bar */}
@@ -35,7 +57,11 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-black text-lg sm:text-xl leading-tight tracking-tight text-white">
+              <h1 
+                onClick={handleBrandSecretClick}
+                className="font-black text-lg sm:text-xl leading-tight tracking-tight text-white select-none cursor-pointer"
+                title="VNPT QLVT"
+              >
                 QLVT
               </h1>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-400/20 text-cyan-200 border border-cyan-400/30">
@@ -51,6 +77,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Buttons on Desktop / Tablet */}
         <div className="flex items-center space-x-2">
+          {/* Quick Lock Button (Only visible when unlocked) */}
+          {isUnlocked && (
+            <button
+              onClick={lockVault}
+              className="flex items-center gap-1.5 bg-indigo-700 hover:bg-indigo-600 active:bg-indigo-800 text-white font-medium text-xs sm:text-sm px-2.5 py-2 rounded-lg transition-colors border border-indigo-400/40 shadow-sm cursor-pointer animate-in fade-in"
+              title="Chế độ riêng tư đang mở. Nhấn để khóa lại ngay."
+            >
+              <Lock className="w-4 h-4 text-amber-300" />
+              <span className="hidden sm:inline">Khóa riêng tư</span>
+            </button>
+          )}
+
           {/* Quick Smart Scan AI */}
           <button
             onClick={onOpenSmartScan}
