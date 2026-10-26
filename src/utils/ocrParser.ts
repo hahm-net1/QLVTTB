@@ -224,10 +224,21 @@ export function parseTextDocumentHeuristic(rawText: string): AIOCRExtractResult 
         }
       }
 
+      // 4. Tìm Số lượng nếu có trên dòng (ví dụ: SL: 5, Số lượng: 5, hoặc cột số lượng)
+      let soLuong = 1;
+      const explicitSLMatch = line.match(/(?:Số\s*lượng|so\s*luong|soluong|SL|Qty|Quantity)[:\s]+(\d+)/i);
+      if (explicitSLMatch) {
+        const parsed = parseInt(explicitSLMatch[1], 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          soLuong = parsed;
+        }
+      }
+
       vatTuItems.push({
         maVT: maVT || '',
         tenVT: tenVT || '',
         serialNumber: serialNumber || '',
+        soLuong: soLuong > 0 ? soLuong : 1,
         Ma_VT: maVT || '',
         Ten_VT: tenVT || '',
         Serial_Number: serialNumber || '',
@@ -307,11 +318,31 @@ export async function extractDocumentWithAI(
             : [''];
           if (serialList.length === 0) serialList.push('');
 
+          const rawItemQty =
+            it.soLuong ??
+            it.SOLUONG ??
+            it.so_luong ??
+            it.soluong ??
+            it.SL ??
+            it.sl ??
+            it['Số lượng'] ??
+            it['Số lượng thực nhập'] ??
+            it['Số lượng thực xuất'] ??
+            it['Số lượng theo chứng từ'] ??
+            it['Quantity'] ??
+            it['quantity'] ??
+            it['Qty'] ??
+            it['qty'];
+
+          const itemSoLuong = Math.max(1, Number(rawItemQty) || 1);
+          const perLineQty = serialList.length > 1 && itemSoLuong === serialList.length ? 1 : (serialList.length > 1 ? 1 : itemSoLuong);
+
           for (const sn of serialList) {
             normalizedItems.push({
               maVT,
               tenVT,
               serialNumber: sn,
+              soLuong: perLineQty,
               Ma_VT: maVT,
               Ten_VT: tenVT,
               Serial_Number: sn,

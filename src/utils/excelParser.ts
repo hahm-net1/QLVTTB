@@ -101,6 +101,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
     maVT: -1,
     tenVT: -1,
     serialNumber: -1,
+    soLuong: -1,
     trangThai: -1,
     ghiChu: -1,
   };
@@ -114,6 +115,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
       maVT: -1,
       tenVT: -1,
       serialNumber: -1,
+      soLuong: -1,
       trangThai: -1,
       ghiChu: -1,
     };
@@ -134,6 +136,9 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
       } else if (/(serial|s\/n|sn|serial\s*number|số\s*máy|số\s*khung|số\s*chế\s*tạo|s_n)/i.test(val)) {
         tempMap.serialNumber = c;
         foundKeywords += 3;
+      } else if (/(số\s*lượng|so\s*luong|soluong|s\.lượng|s\.l|thực\s*nhập|thực\s*xuất|qty|quantity|count)/i.test(val) || /^sl$/i.test(val)) {
+        tempMap.soLuong = c;
+        foundKeywords += 2;
       } else if (/(trạng\s*thái|tình\s*trạng|chất\s*lượng|phẩm\s*chất|status)/i.test(val)) {
         tempMap.trangThai = c;
         foundKeywords++;
@@ -143,7 +148,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
       }
     }
 
-    // Nếu dòng có ít nhất 2 cột đặc trưng của bảng vật tư (ví dụ có Serial hoặc Tên VT hoặc Mã VT)
+    // Nếu dòng có ít nhất 2 cột đặc trưng của bảng vật tư (ví dụ có Serial hoặc Tên VT hoặc Mã VT hoặc Số lượng)
     if (foundKeywords >= 3 || (tempMap.serialNumber !== -1 && (tempMap.tenVT !== -1 || tempMap.maVT !== -1))) {
       headerRowIndex = r;
       colIndexMap = tempMap;
@@ -156,6 +161,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
     maVT: string;
     tenVT: string;
     serialNumber: string;
+    soLuong?: number;
     trangThaiSauSua: TrangThaiSauSua;
   }> = [];
 
@@ -174,6 +180,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
     let maVT = '';
     let tenVT = '';
     let serialNumber = '';
+    let soLuong = 1;
     let trangThaiSauSua: TrangThaiSauSua = 'TOT';
 
     if (headerRowIndex !== -1) {
@@ -186,6 +193,13 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
       if (colIndexMap.serialNumber !== -1 && row[colIndexMap.serialNumber]) {
         serialNumber = String(row[colIndexMap.serialNumber]).trim();
       }
+      if (colIndexMap.soLuong !== -1 && row[colIndexMap.soLuong] !== undefined && row[colIndexMap.soLuong] !== null) {
+        const rawSL = String(row[colIndexMap.soLuong]).trim().replace(/,/g, '.');
+        const parsedSL = parseFloat(rawSL);
+        if (!isNaN(parsedSL) && parsedSL > 0) {
+          soLuong = Math.round(parsedSL);
+        }
+      }
       if (colIndexMap.trangThai !== -1 && row[colIndexMap.trangThai]) {
         const tt = String(row[colIndexMap.trangThai]).toLowerCase();
         if (tt.includes('hỏng') || tt.includes('hong') || tt.includes('bad')) trangThaiSauSua = 'HONG';
@@ -195,10 +209,19 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
     }
 
     // Heuristic bổ sung: Nếu chưa tìm được qua header, dò tìm từng ô trong dòng
-    if (!serialNumber || (!maVT && !tenVT)) {
+    if (!serialNumber || (!maVT && !tenVT) || soLuong === 1) {
       for (let c = 0; c < row.length; c++) {
         const cell = String(row[c] || '').trim();
         if (!cell) continue;
+
+        // Nhận diện Số lượng dạng "SL: 5" hoặc "Số lượng: 5"
+        if (soLuong === 1) {
+          const slCellMatch = cell.match(/^(?:sl|số\s*lượng|qty)[:\s]+(\d+)$/i);
+          if (slCellMatch) {
+            const parsed = parseInt(slCellMatch[1], 10);
+            if (!isNaN(parsed) && parsed > 0) soLuong = parsed;
+          }
+        }
 
         // Nhận diện Serial: chuỗi từ 6-30 ký tự, có định dạng chữ số, hoặc bắt đầu bằng tiền tố viễn thông quen thuộc
         if (
@@ -235,6 +258,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
         maVT,
         tenVT,
         serialNumber,
+        soLuong: soLuong > 0 ? soLuong : 1,
         trangThaiSauSua,
       });
     }
@@ -244,7 +268,7 @@ export async function parseExcelDocument(file: File): Promise<AIOCRExtractResult
 
   // Tạo tóm tắt text hiển thị
   result.extractedText = `Tệp: ${file.name}\nTổng số dòng thiết bị trích xuất: ${vatTuList.length}\n` +
-    vatTuList.map((v, i) => `${i + 1}. [${v.maVT}] ${v.tenVT} - S/N: ${v.serialNumber || '(Không có)'}`).join('\n');
+    vatTuList.map((v, i) => `${i + 1}. [${v.maVT}] ${v.tenVT} - SL: ${v.soLuong || 1} - S/N: ${v.serialNumber || '(Không có)'}`).join('\n');
 
   return result;
 }

@@ -197,11 +197,15 @@ export const SmartScanModal: React.FC<SmartScanModalProps> = ({
       const maVT = item.Ma_VT || item.maVT || '';
       const tenVT = item.Ten_VT || item.tenVT || '';
       const serialNumber = item.Serial_Number || item.serialNumber || '';
+      const rawQty = item.soLuong ?? (item as any).SOLUONG ?? (item as any).so_luong ?? (item as any).SL ?? (item as any)['Số lượng'];
+      const finalQty = Math.max(1, Number(rawQty) || 1);
+
       return {
         id: `vt-${Date.now()}-${idx}`,
         maVT,
         tenVT,
         serialNumber,
+        soLuong: finalQty,
         trangThaiSauSua: item.trangThaiSauSua || 'TOT',
         soPNKHoanTat: '',
         trangThaiHienTai: defaultItemStatus,
@@ -561,6 +565,9 @@ Vị trí kho xuất: KTTC-C1 | Phân đoạn xuất: KH01
                               ) : (
                                 <span className="text-slate-400 italic font-normal ml-1">Không có</span>
                               )}
+                            </span>
+                            <span className="font-mono text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 text-[10px] font-bold">
+                              SL: {item.soLuong || 1}
                             </span>
                             <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-200 text-[10px]">
                               {item.trangThaiHienTai || 'Tiếp nhận mới'}

@@ -9,11 +9,13 @@ export interface ChiTietVatTu {
   maVT: string;
   tenVT: string;
   serialNumber: string;
+  soLuong?: number; // Số lượng (mặc định 1 cho kho sửa chữa, cho phép > 1 cho kho Lab)
   trangThaiSauSua: TrangThaiSauSua;
   soPNKHoanTat: string;
   trangThaiHienTai: string; // Có thể chọn preset hoặc nhập tự do
   ghiChuVatTu?: string;
   privateNote?: string; // Ghi chú riêng tư (mã hóa client-side với mã PIN của người dùng khi lưu Firestore)
+  isLab?: boolean; // Vật tư thuộc Kho Lab (khi nhập ghi chú có từ khóa ẩn #lab)
   updatedAt?: string;
 }
 
@@ -26,6 +28,7 @@ export interface PhieuGiaoDich {
   canBoTiepNhan: string;
   ghiChu: string;
   privateNote?: string; // Ghi chú riêng tư cấp phiếu (nếu có)
+  isLab?: boolean; // Đánh dấu phiếu thuộc Kho Lab (nhập liệu trong suốt qua từ khóa #lab trong ghi chú)
   danhSachVatTu: ChiTietVatTu[];
   createdAt: string;
   updatedAt: string;
@@ -53,6 +56,8 @@ export interface AIOCRExtractResult {
     maVT?: string;
     tenVT?: string;
     serialNumber?: string;
+    soLuong?: number;
+    SOLUONG?: number;
     Ma_VT?: string;
     Ten_VT?: string;
     Serial_Number?: string;

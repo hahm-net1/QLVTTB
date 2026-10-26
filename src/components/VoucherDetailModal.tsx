@@ -19,7 +19,8 @@ import {
   Upload,
   FileSpreadsheet,
   MoreVertical,
-  Lock
+  Lock,
+  FlaskConical
 } from 'lucide-react';
 import { usePrivateVault } from '../context/PrivateVaultContext';
 import { PhieuGiaoDich, ChiTietVatTu, TrangThaiSauSua } from '../types';
@@ -122,7 +123,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
     }
   }, [voucher, isUnlocked, activePin, decryptNote]);
 
-  if (!voucher) return null;
+  if (!voucher || (voucher.isLab && !isUnlocked)) return null;
 
   const typeBadge = getLoaiChungTuBadge(voucher.loaiChungTu);
 
@@ -564,6 +565,12 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
             <span className="font-mono text-sm sm:text-base md:text-lg font-black bg-[#00a3e0] text-white px-3 py-1 rounded-lg shrink-0 shadow-xs tracking-wider">
               {voucher.soChungTu}
             </span>
+            {isUnlocked && voucher.isLab && (
+              <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/30 text-purple-200 border border-purple-300/40 flex items-center gap-1.5 shrink-0">
+                <FlaskConical className="w-3.5 h-3.5 text-purple-300" />
+                <span>Kho Lab</span>
+              </span>
+            )}
             <h3 className="font-bold text-sm sm:text-base truncate">
               {isUpdatingStatus ? 'Cập nhật kết quả sau sửa chữa' : 'Chi tiết phiếu tiếp nhận & vật tư'}
             </h3>
@@ -788,7 +795,9 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                 <div className="flex items-center justify-between pb-1">
                   <h4 className="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-[#00a3e0]" />
-                    <span>Danh mục vật tư cập nhật sau sửa chữa • {items.length} thiết bị</span>
+                    <span>
+                      Danh mục vật tư cập nhật sau sửa chữa • {items.reduce((s, it) => s + (Number(it.soLuong) || 1), 0)} thiết bị ({items.length} dòng)
+                    </span>
                   </h4>
                   <span className="text-[11px] text-slate-500 font-medium">
                     Bảng thao tác liên tục trên 1 hàng ngang
@@ -803,7 +812,8 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                         <tr>
                           <th className="py-2 px-2.5 w-12 text-center">STT</th>
                           <th className="py-2 px-3 w-64">Tên vật tư & Mã VT</th>
-                          <th className="py-2 px-3 w-52 text-left">Serial (S/N)</th>
+                          <th className="py-2 px-3 w-48 text-left">Serial (S/N)</th>
+                          <th className="py-2 px-2 w-14 text-center">SL</th>
                           <th className="py-2 px-3 w-56 text-center">Trạng thái sau sửa</th>
                           <th className="py-2 px-3">Ghi chú sau sửa chữa</th>
                           {isUnlocked && (
@@ -845,6 +855,13 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                             <td className="py-2 px-3 whitespace-nowrap">
                               <span className="font-mono text-sm sm:text-base font-black text-red-600 tracking-wider bg-red-50/70 border border-red-200 px-2.5 py-0.5 rounded-lg inline-block shadow-2xs">
                                 {item.serialNumber || '—'}
+                              </span>
+                            </td>
+
+                            {/* Số lượng */}
+                            <td className="py-2 px-2 text-center whitespace-nowrap font-bold text-xs text-slate-700">
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 border border-slate-200">
+                                {item.soLuong || 1}
                               </span>
                             </td>
 
@@ -1102,7 +1119,13 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 uppercase flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-[#00a3e0]" />
-                    <span>Chi tiết danh mục thiết bị, vật tư ({voucher.danhSachVatTu.length})</span>
+                    <span>
+                      Chi tiết danh mục thiết bị, vật tư (
+                      {voucher.danhSachVatTu.reduce((s, it) => s + (Number(it.soLuong) || 1), 0) > voucher.danhSachVatTu.length
+                        ? `${voucher.danhSachVatTu.reduce((s, it) => s + (Number(it.soLuong) || 1), 0)} thiết bị • ${voucher.danhSachVatTu.length} dòng`
+                        : `${voucher.danhSachVatTu.length} thiết bị`}
+                      )
+                    </span>
                   </h4>
 
                   {!isBBBG && (
@@ -1140,10 +1163,14 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                           {item.tenVT}
                         </h5>
 
-                        <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200/80">
+                        <div className="grid grid-cols-3 gap-2 text-[11px] pt-1 border-t border-slate-200/80">
                           <div>
                             <span className="text-slate-400 block text-[10px]">Số Serial:</span>
                             <span className="font-mono font-bold text-red-600 text-xs">{item.serialNumber || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Số lượng:</span>
+                            <span className="font-bold text-slate-800 text-xs">{item.soLuong || 1}</span>
                           </div>
                           <div>
                             <span className="text-slate-400 block text-[10px]">{isBBBG ? 'Hiện trạng:' : 'Trạng thái:'}</span>
@@ -1192,6 +1219,7 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                         <th className="py-2 px-2.5 font-bold text-center w-28 border border-slate-300 whitespace-nowrap">Mã VT</th>
                         <th className="py-2 px-3 font-bold border border-slate-300">Tên thiết bị / Vật tư</th>
                         <th className="py-2 px-3 font-bold text-center w-36 border border-slate-300 whitespace-nowrap">Số Serial (S/N)</th>
+                        <th className="py-2 px-2 font-bold text-center w-14 border border-slate-300 whitespace-nowrap">SL</th>
                         <th className="py-2 px-2.5 font-bold text-center w-28 border border-slate-300 whitespace-nowrap">
                           {isBBBG ? 'Hiện trạng' : 'Trạng thái'}
                         </th>
@@ -1230,6 +1258,10 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                             <td className="py-2 px-3 text-center font-mono font-black text-red-600 text-xs sm:text-[13px] border border-slate-300 whitespace-nowrap tracking-wide">
                               {item.serialNumber || '—'}
                             </td>
+                            {/* Cột Số lượng */}
+                            <td className="py-2 px-2 text-center font-bold text-slate-800 border border-slate-300 whitespace-nowrap">
+                              {item.soLuong || 1}
+                            </td>
                             <td className="py-2 px-2.5 text-center border border-slate-300 whitespace-nowrap">
                               <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${statusBadge.bg} ${statusBadge.border}`}>
                                 {statusBadge.label}
@@ -1248,6 +1280,17 @@ export const VoucherDetailModal: React.FC<VoucherDetailModalProps> = ({
                         );
                       })}
                     </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                        <td colSpan={4} className="py-2 px-3 text-right text-slate-800 border border-slate-300">
+                          Tổng cộng ({voucher.danhSachVatTu.length} dòng):
+                        </td>
+                        <td className="py-2 px-2 text-center text-slate-900 border border-slate-300 font-bold">
+                          {voucher.danhSachVatTu.reduce((sum, item) => sum + (Number(item.soLuong) || 1), 0)}
+                        </td>
+                        <td colSpan={2} className="py-2 px-3 border border-slate-300"></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>

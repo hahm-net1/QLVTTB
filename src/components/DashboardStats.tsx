@@ -22,7 +22,8 @@ import {
   Lock,
   KeyRound,
   ShieldCheck,
-  Search
+  Search,
+  FlaskConical
 } from 'lucide-react';
 import { PhieuGiaoDich } from '../types';
 import { usePrivateVault } from '../context/PrivateVaultContext';
@@ -51,6 +52,24 @@ interface PrivateItemRecord {
   plainNote: string;
 }
 
+interface LabItemRecord {
+  itemId: string;
+  voucherId: string;
+  soChungTu: string;
+  loaiChungTu: string;
+  ngayTiepNhan: string;
+  donViLienQuan: string;
+  canBoTiepNhan: string;
+  maVT: string;
+  tenVT: string;
+  serialNumber: string;
+  soLuong: number;
+  trangThaiSauSua: string;
+  trangThaiHienTai: string;
+  ghiChuVatTu: string;
+  plainPrivateNote?: string;
+}
+
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
   vouchers,
   onExportCSV,
@@ -59,10 +78,18 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 }) => {
   const { isUnlocked, activePin, decryptNote, lockVault } = usePrivateVault();
 
+  // State bộ lọc phạm vi kho (Chỉ hiển thị khi đã mở khóa PIN bảo mật)
+  const [warehouseScope, setWarehouseScope] = useState<'ALL' | 'REPAIR' | 'LAB'>('ALL');
+
   // State thống kê cá nhân (Ghi chú riêng tư)
   const [privateRecords, setPrivateRecords] = useState<PrivateItemRecord[]>([]);
   const [privateSearch, setPrivateSearch] = useState<string>('');
   const [privateStatusFilter, setPrivateStatusFilter] = useState<'ALL' | 'TOT' | 'HONG' | 'LOI'>('ALL');
+
+  // State thống kê chuyên sâu Kho Lab (chỉ khi mở khóa PIN)
+  const [labRecords, setLabRecords] = useState<LabItemRecord[]>([]);
+  const [labSearch, setLabSearch] = useState<string>('');
+  const [labStatusFilter, setLabStatusFilter] = useState<'ALL' | 'TOT' | 'HONG' | 'LOI'>('ALL');
 
   // State thống kê card sau sửa theo thời gian
   const [timeMode, setTimeMode] = useState<TimeGroupingMode>('day');
@@ -70,8 +97,23 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const [statsEndDate, setStatsEndDate] = useState<string>('');
   const [expandedPeriodKey, setExpandedPeriodKey] = useState<string | null>(null);
 
+  // Danh sách chứng từ theo quyền truy cập & phạm vi kho đã chọn
+  // Khi chưa mở khóa bằng PIN: ẨN HOÀN TOÀN TẤT CẢ VẬT TƯ & PHIẾU KHO LAB
+  const scopedVouchers = useMemo(() => {
+    if (!isUnlocked) {
+      return vouchers.filter((v) => !v.isLab);
+    }
+    if (warehouseScope === 'LAB') {
+      return vouchers.filter((v) => v.isLab);
+    }
+    if (warehouseScope === 'REPAIR') {
+      return vouchers.filter((v) => !v.isLab);
+    }
+    return vouchers;
+  }, [vouchers, isUnlocked, warehouseScope]);
+
   // Compute metrics
-  const totalVouchers = vouchers.length;
+  const totalVouchers = scopedVouchers.length;
 
   // Helper kiểm tra BBBG đã hoàn thành gán PNK
   const isCompletedBBBG = (v: PhieuGiaoDich) => {
@@ -89,16 +131,13 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   };
 
   // Số lượng BBBG đã hoàn thành gán PNK
-  const completedBBBGVouchers = vouchers.filter((v) => isCompletedBBBG(v));
+  const completedBBBGVouchers = scopedVouchers.filter((v) => isCompletedBBBG(v));
   const countCompletedBBBG = completedBBBGVouchers.length;
   // Số lượng vật tư của BBBG đã hoàn thành gán PNK được loại trừ để chống trùng lặp
   const excludedCompletedItemsCount = completedBBBGVouchers.reduce((sum, v) => sum + v.danhSachVatTu.length, 0);
 
   // DANH SÁCH VẬT TƯ KIỂM ĐẾM TRONG KHO (CHỐNG TRÙNG LẶP):
-  // 1. Toàn bộ vật tư từ PXK, PNK
-  // 2. Dữ liệu về vật tư của BBBG khi đã hoàn thành gán PNK sẽ KHÔNG ĐƯỢC KIỂM ĐẾM trong các thống kê kho
-  // 3. Đối với BBBG chưa hoàn thành: chỉ kiểm đếm các vật tư còn đang "Tạm nhận" chờ gán PNK (tránh đếm trùng các vật tư đã gán PNK)
-  const allItems = vouchers.flatMap((v) => {
+  const allItems = scopedVouchers.flatMap((v) => {
     const isBB = v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG';
     if (!isBB) {
       return v.danhSachVatTu;
@@ -111,27 +150,27 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     return v.danhSachVatTu.filter((it) => !it.soPNKHoanTat || it.trangThaiHienTai === 'Tạm nhận');
   });
 
-  const totalItems = allItems.length;
+  const totalItems = allItems.reduce((sum, i) => sum + (Number(i.soLuong) || 1), 0);
 
-  const countNKTot = allItems.filter(
-    (i) => i.trangThaiHienTai === 'NK tốt'
-  ).length;
+  const countNKTot = allItems
+    .filter((i) => i.trangThaiHienTai === 'NK tốt')
+    .reduce((sum, i) => sum + (Number(i.soLuong) || 1), 0);
 
-  const countNKHong = allItems.filter(
-    (i) => i.trangThaiHienTai === 'NK hỏng'
-  ).length;
+  const countNKHong = allItems
+    .filter((i) => i.trangThaiHienTai === 'NK hỏng')
+    .reduce((sum, i) => sum + (Number(i.soLuong) || 1), 0);
 
-  const countKTT = allItems.filter(
-    (i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa'
-  ).length;
+  const countKTT = allItems
+    .filter((i) => i.trangThaiHienTai === 'Kiểm tra thêm' || i.trangThaiHienTai === 'Đang sửa chữa')
+    .reduce((sum, i) => sum + (Number(i.soLuong) || 1), 0);
 
-  const countTiepNhanMoi = allItems.filter(
-    (i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới'
-  ).length;
+  const countTiepNhanMoi = allItems
+    .filter((i) => !i.trangThaiHienTai || i.trangThaiHienTai === 'Tiếp nhận mới')
+    .reduce((sum, i) => sum + (Number(i.soLuong) || 1), 0);
 
-  const countTamNhan = allItems.filter(
-    (i) => i.trangThaiHienTai === 'Tạm nhận'
-  ).length;
+  const countTamNhan = allItems
+    .filter((i) => i.trangThaiHienTai === 'Tạm nhận')
+    .reduce((sum, i) => sum + (Number(i.soLuong) || 1), 0);
 
   const pctTot = totalItems > 0 ? Math.round((countNKTot / totalItems) * 100) : 0;
   const pctHong = totalItems > 0 ? Math.round((countNKHong / totalItems) * 100) : 0;
@@ -140,9 +179,9 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const pctTamNhan = totalItems > 0 ? Math.round((countTamNhan / totalItems) * 100) : 0;
 
   // Voucher type breakdown
-  const countPXK = vouchers.filter((v) => v.loaiChungTu === 'PXK').length;
-  const countPNK = vouchers.filter((v) => v.loaiChungTu === 'PNK').length;
-  const countGM = vouchers.filter((v) => v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG').length;
+  const countPXK = scopedVouchers.filter((v) => v.loaiChungTu === 'PXK').length;
+  const countPNK = scopedVouchers.filter((v) => v.loaiChungTu === 'PNK').length;
+  const countGM = scopedVouchers.filter((v) => v.loaiChungTu === 'GUI_MUON' || (v.loaiChungTu as string) === 'BBBG').length;
 
   // Top equipment types (Mã VT & Tên VT)
   interface EquipStat {
@@ -173,9 +212,10 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         equipMap[key].maVT = ma;
       }
     }
-    equipMap[key].count += 1;
-    if (item.trangThaiHienTai === 'NK tốt') equipMap[key].countTot += 1;
-    if (item.trangThaiHienTai === 'NK hỏng') equipMap[key].countHong += 1;
+    const qty = Number(item.soLuong) || 1;
+    equipMap[key].count += qty;
+    if (item.trangThaiHienTai === 'NK tốt') equipMap[key].countTot += qty;
+    if (item.trangThaiHienTai === 'NK hỏng') equipMap[key].countHong += qty;
   });
 
   const topEquip = Object.values(equipMap)
@@ -194,6 +234,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       maVT: string;
       tenVT: string;
       serialNumber: string;
+      soLuong?: number;
       trangThaiSauSua: string;
       trangThaiHienTai: string;
       timestamp: number;
@@ -201,7 +242,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       formattedTime: string;
     }> = [];
 
-    vouchers.forEach((v) => {
+    scopedVouchers.forEach((v) => {
       (v.danhSachVatTu || []).forEach((it) => {
         const isPostRepair =
           it.trangThaiHienTai === 'NK tốt' ||
@@ -239,141 +280,149 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             maVT: it.maVT || '',
             tenVT: it.tenVT || 'Thiết bị viễn thông',
             serialNumber: it.serialNumber || '',
+            soLuong: (it.soLuong ?? 0) > 0 ? Number(it.soLuong) : 1,
             trangThaiSauSua: it.trangThaiSauSua || (it.trangThaiHienTai === 'NK tốt' ? 'TOT' : it.trangThaiHienTai === 'NK hỏng' ? 'HONG' : 'LOI'),
             trangThaiHienTai: it.trangThaiHienTai,
             timestamp,
             dateStr,
             formattedTime,
           });
-        }
+          }
+        });
       });
-    });
 
-    return list;
-  }, [vouchers]);
+      return list;
+    }, [scopedVouchers]);
 
-  // Lọc theo khoảng thời gian nếu người dùng chọn
-  const filteredPostRepairCards = useMemo(() => {
-    return postRepairCards.filter((card) => {
-      if (statsStartDate && card.dateStr < statsStartDate) return false;
-      if (statsEndDate && card.dateStr > statsEndDate) return false;
-      return true;
-    });
-  }, [postRepairCards, statsStartDate, statsEndDate]);
+    // Lọc theo khoảng thời gian nếu người dùng chọn
+    const filteredPostRepairCards = useMemo(() => {
+      return postRepairCards.filter((card) => {
+        if (statsStartDate && card.dateStr < statsStartDate) return false;
+        if (statsEndDate && card.dateStr > statsEndDate) return false;
+        return true;
+      });
+    }, [postRepairCards, statsStartDate, statsEndDate]);
 
-  // Gom nhóm thống kê theo: ngày, tuần, tháng, năm
-  const timeGroupedStats = useMemo(() => {
-    interface PeriodBucket {
-      key: string;
-      label: string;
-      subLabel: string;
-      sortTime: number;
-      total: number;
-      tot: number;
-      hong: number;
-      ktt: number;
-      cards: typeof filteredPostRepairCards;
-    }
+    // Gom nhóm thống kê theo: ngày, tuần, tháng, năm
+    const timeGroupedStats = useMemo(() => {
+      interface PeriodBucket {
+        key: string;
+        label: string;
+        subLabel: string;
+        sortTime: number;
+        total: number;
+        tot: number;
+        hong: number;
+        ktt: number;
+        cards: typeof filteredPostRepairCards;
+      }
 
-    const map: Record<string, PeriodBucket> = {};
+      const map: Record<string, PeriodBucket> = {};
 
-    filteredPostRepairCards.forEach((card) => {
-      const d = new Date(card.timestamp);
-      let key = '';
-      let label = '';
-      let subLabel = '';
-      let sortTime = 0;
+      filteredPostRepairCards.forEach((card) => {
+        const d = new Date(card.timestamp);
+        let key = '';
+        let label = '';
+        let subLabel = '';
+        let sortTime = 0;
 
-      if (timeMode === 'day') {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        key = `${year}-${month}-${day}`;
-        label = `Ngày ${day}/${month}/${year}`;
-        subLabel = `${day}/${month}/${year}`;
-        sortTime = new Date(year, d.getMonth(), d.getDate()).getTime();
-      } else if (timeMode === 'week') {
-        const dayOfWeek = (d.getDay() + 6) % 7; // Monday = 0
-        const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek);
-        const sunday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek + 6);
+        if (timeMode === 'day') {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          key = `${year}-${month}-${day}`;
+          label = `Ngày ${day}/${month}/${year}`;
+          subLabel = `${day}/${month}/${year}`;
+          sortTime = new Date(year, d.getMonth(), d.getDate()).getTime();
+        } else if (timeMode === 'week') {
+          const dayOfWeek = (d.getDay() + 6) % 7; // Monday = 0
+          const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek);
+          const sunday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dayOfWeek + 6);
 
-        const mDay = String(monday.getDate()).padStart(2, '0');
-        const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
-        const mYear = monday.getFullYear();
+          const mDay = String(monday.getDate()).padStart(2, '0');
+          const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+          const mYear = monday.getFullYear();
 
-        const sDay = String(sunday.getDate()).padStart(2, '0');
-        const sMonth = String(sunday.getMonth() + 1).padStart(2, '0');
-        const sYear = sunday.getFullYear();
+          const sDay = String(sunday.getDate()).padStart(2, '0');
+          const sMonth = String(sunday.getMonth() + 1).padStart(2, '0');
+          const sYear = sunday.getFullYear();
 
-        const target = new Date(monday.valueOf());
-        target.setDate(target.getDate() + 3);
-        const firstThursday = target.valueOf();
-        target.setMonth(0, 1);
-        if (target.getDay() !== 4) {
-          target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+          const target = new Date(monday.valueOf());
+          target.setDate(target.getDate() + 3);
+          const firstThursday = target.valueOf();
+          target.setMonth(0, 1);
+          if (target.getDay() !== 4) {
+            target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+          }
+          const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+
+          key = `${mYear}-W${String(weekNum).padStart(2, '0')}`;
+          label = `Tuần ${weekNum} (${mYear})`;
+          subLabel = `Từ ${mDay}/${mMonth}/${mYear} đến ${sDay}/${sMonth}/${sYear}`;
+          sortTime = monday.getTime();
+        } else if (timeMode === 'month') {
+          const year = d.getFullYear();
+          const month = d.getMonth() + 1;
+          key = `${year}-${String(month).padStart(2, '0')}`;
+          label = `Tháng ${String(month).padStart(2, '0')}/${year}`;
+          subLabel = `Tháng ${month} năm ${year}`;
+          sortTime = new Date(year, d.getMonth(), 1).getTime();
+        } else {
+          // year
+          const year = d.getFullYear();
+          key = `${year}`;
+          label = `Năm ${year}`;
+          subLabel = `Cả năm ${year}`;
+          sortTime = new Date(year, 0, 1).getTime();
         }
-        const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
 
-        key = `${mYear}-W${String(weekNum).padStart(2, '0')}`;
-        label = `Tuần ${weekNum} (${mYear})`;
-        subLabel = `Từ ${mDay}/${mMonth}/${mYear} đến ${sDay}/${sMonth}/${sYear}`;
-        sortTime = monday.getTime();
-      } else if (timeMode === 'month') {
-        const year = d.getFullYear();
-        const month = d.getMonth() + 1;
-        key = `${year}-${String(month).padStart(2, '0')}`;
-        label = `Tháng ${String(month).padStart(2, '0')}/${year}`;
-        subLabel = `Tháng ${month} năm ${year}`;
-        sortTime = new Date(year, d.getMonth(), 1).getTime();
-      } else {
-        // year
-        const year = d.getFullYear();
-        key = `${year}`;
-        label = `Năm ${year}`;
-        subLabel = `Cả năm ${year}`;
-        sortTime = new Date(year, 0, 1).getTime();
-      }
+        if (!map[key]) {
+          map[key] = {
+            key,
+            label,
+            subLabel,
+            sortTime,
+            total: 0,
+            tot: 0,
+            hong: 0,
+            ktt: 0,
+            cards: [],
+          };
+        }
 
-      if (!map[key]) {
-        map[key] = {
-          key,
-          label,
-          subLabel,
-          sortTime,
-          total: 0,
-          tot: 0,
-          hong: 0,
-          ktt: 0,
-          cards: [],
-        };
-      }
+        const cardQty = Number((card as any).soLuong) || 1;
+        map[key].total += cardQty;
+        const isTot = card.trangThaiHienTai === 'NK tốt' || card.trangThaiSauSua === 'TOT';
+        const isHong = card.trangThaiHienTai === 'NK hỏng' || card.trangThaiSauSua === 'HONG';
+        if (isTot) {
+          map[key].tot += cardQty;
+        } else if (isHong) {
+          map[key].hong += cardQty;
+        } else {
+          map[key].ktt += cardQty;
+        }
+        map[key].cards.push(card);
+      });
 
-      map[key].total += 1;
-      const isTot = card.trangThaiHienTai === 'NK tốt' || card.trangThaiSauSua === 'TOT';
-      const isHong = card.trangThaiHienTai === 'NK hỏng' || card.trangThaiSauSua === 'HONG';
-      if (isTot) {
-        map[key].tot += 1;
-      } else if (isHong) {
-        map[key].hong += 1;
-      } else {
-        map[key].ktt += 1;
-      }
-      map[key].cards.push(card);
-    });
+      return Object.values(map)
+        .map((bucket) => ({
+          ...bucket,
+          cards: bucket.cards.sort((a, b) => b.timestamp - a.timestamp),
+        }))
+        .sort((a, b) => b.sortTime - a.sortTime);
+    }, [filteredPostRepairCards, timeMode]);
 
-    return Object.values(map)
-      .map((bucket) => ({
-        ...bucket,
-        cards: bucket.cards.sort((a, b) => b.timestamp - a.timestamp),
-      }))
-      .sort((a, b) => b.sortTime - a.sortTime);
-  }, [filteredPostRepairCards, timeMode]);
-
-  const totalCardsUpdated = filteredPostRepairCards.length;
-  const totalCardsTot = filteredPostRepairCards.filter((c) => c.trangThaiHienTai === 'NK tốt' || c.trangThaiSauSua === 'TOT').length;
-  const totalCardsHong = filteredPostRepairCards.filter((c) => c.trangThaiHienTai === 'NK hỏng' || c.trangThaiSauSua === 'HONG').length;
-  const totalCardsKTT = filteredPostRepairCards.filter((c) => c.trangThaiHienTai !== 'NK tốt' && c.trangThaiSauSua !== 'TOT' && c.trangThaiHienTai !== 'NK hỏng' && c.trangThaiSauSua !== 'HONG').length;
-  const pctCardsTot = totalCardsUpdated > 0 ? Math.round((totalCardsTot / totalCardsUpdated) * 100) : 0;
+    const totalCardsUpdated = filteredPostRepairCards.reduce((sum, c) => sum + (Number((c as any).soLuong) || 1), 0);
+    const totalCardsTot = filteredPostRepairCards
+      .filter((c) => c.trangThaiHienTai === 'NK tốt' || c.trangThaiSauSua === 'TOT')
+      .reduce((sum, c) => sum + (Number((c as any).soLuong) || 1), 0);
+    const totalCardsHong = filteredPostRepairCards
+      .filter((c) => c.trangThaiHienTai === 'NK hỏng' || c.trangThaiSauSua === 'HONG')
+      .reduce((sum, c) => sum + (Number((c as any).soLuong) || 1), 0);
+    const totalCardsKTT = filteredPostRepairCards
+      .filter((c) => c.trangThaiHienTai !== 'NK tốt' && c.trangThaiSauSua !== 'TOT' && c.trangThaiHienTai !== 'NK hỏng' && c.trangThaiSauSua !== 'HONG')
+      .reduce((sum, c) => sum + (Number((c as any).soLuong) || 1), 0);
+    const pctCardsTot = totalCardsUpdated > 0 ? Math.round((totalCardsTot / totalCardsUpdated) * 100) : 0;
 
   // Giải mã các ghi chú riêng tư khi mở khóa bảo mật
   useEffect(() => {
@@ -462,6 +511,135 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     const link = document.createElement('a');
     link.href = url;
     link.download = `Thong_ke_Ghi_chu_rieng_tu_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+  };
+
+  // Tải danh sách vật tư thuộc Kho Lab khi đã mở khóa bảo mật
+  useEffect(() => {
+    if (!isUnlocked || !activePin) {
+      setLabRecords([]);
+      return;
+    }
+
+    let isMounted = true;
+    const loadLabRecords = async () => {
+      const list: LabItemRecord[] = [];
+      for (const v of vouchers) {
+        const voucherIsLab = Boolean(v.isLab);
+        for (const it of (v.danhSachVatTu || [])) {
+          if (voucherIsLab || it.isLab) {
+            let plainNote = '';
+            if (it.privateNote && it.privateNote.trim()) {
+              plainNote = (await decryptNote(it.privateNote)) || '';
+            }
+            list.push({
+              itemId: it.id,
+              voucherId: v.id,
+              soChungTu: v.soChungTu,
+              loaiChungTu: v.loaiChungTu,
+              ngayTiepNhan: v.ngayTiepNhan,
+              donViLienQuan: v.donViLienQuan,
+              canBoTiepNhan: v.canBoTiepNhan,
+              maVT: it.maVT || '',
+              tenVT: it.tenVT || '',
+              serialNumber: it.serialNumber || '',
+              soLuong: (it.soLuong ?? 0) > 0 ? Number(it.soLuong) : 1,
+              trangThaiSauSua: it.trangThaiSauSua || 'TOT',
+              trangThaiHienTai: it.trangThaiHienTai || '',
+              ghiChuVatTu: it.ghiChuVatTu || '',
+              plainPrivateNote: plainNote,
+            });
+          }
+        }
+      }
+      if (isMounted) {
+        setLabRecords(list);
+      }
+    };
+
+    loadLabRecords();
+    return () => {
+      isMounted = false;
+    };
+  }, [vouchers, isUnlocked, activePin, decryptNote]);
+
+  // Bộ lọc danh mục vật tư Kho Lab
+  const filteredLabRecords = useMemo(() => {
+    return labRecords.filter((rec) => {
+      if (labStatusFilter !== 'ALL' && rec.trangThaiSauSua !== labStatusFilter) {
+        return false;
+      }
+      if (!labSearch.trim()) return true;
+      const q = labSearch.toLowerCase();
+      return (
+        rec.serialNumber.toLowerCase().includes(q) ||
+        rec.tenVT.toLowerCase().includes(q) ||
+        rec.maVT.toLowerCase().includes(q) ||
+        rec.soChungTu.toLowerCase().includes(q) ||
+        rec.ghiChuVatTu.toLowerCase().includes(q) ||
+        (rec.plainPrivateNote && rec.plainPrivateNote.toLowerCase().includes(q)) ||
+        rec.donViLienQuan.toLowerCase().includes(q)
+      );
+    });
+  }, [labRecords, labSearch, labStatusFilter]);
+
+  const labTotalQty = labRecords.reduce((sum, r) => sum + (Number(r.soLuong) || 1), 0);
+  const labCountTot = labRecords
+    .filter((r) => r.trangThaiSauSua === 'TOT' || r.trangThaiHienTai === 'NK tốt')
+    .reduce((sum, r) => sum + (Number(r.soLuong) || 1), 0);
+  const labCountHong = labRecords
+    .filter((r) => r.trangThaiSauSua === 'HONG' || r.trangThaiHienTai === 'NK hỏng')
+    .reduce((sum, r) => sum + (Number(r.soLuong) || 1), 0);
+  const labCountKTT = labRecords
+    .filter(
+      (r) =>
+        r.trangThaiSauSua === 'LOI' ||
+        r.trangThaiHienTai === 'Kiểm tra thêm' ||
+        r.trangThaiHienTai === 'Đang sửa chữa' ||
+        r.trangThaiHienTai === 'Tạm nhận'
+    )
+    .reduce((sum, r) => sum + (Number(r.soLuong) || 1), 0);
+
+  const handleExportLabCSV = () => {
+    if (labRecords.length === 0) return;
+    const headers = [
+      'STT',
+      'Số chứng từ',
+      'Loại phiếu',
+      'Ngày tiếp nhận',
+      'Đơn vị liên quan',
+      'Cán bộ tiếp nhận',
+      'Mã VT',
+      'Tên thiết bị',
+      'Số Serial (S/N)',
+      'Số lượng',
+      'Trạng thái sau sửa',
+      'Trạng thái hiện tại',
+      'Ghi chú thiết bị',
+      'Ghi chú riêng tư (nếu có)',
+    ];
+    const rows = labRecords.map((r, i) => [
+      i + 1,
+      `"${r.soChungTu}"`,
+      `"${r.loaiChungTu}"`,
+      `"${r.ngayTiepNhan}"`,
+      `"${r.donViLienQuan}"`,
+      `"${r.canBoTiepNhan}"`,
+      `"${r.maVT}"`,
+      `"${r.tenVT}"`,
+      `"${r.serialNumber}"`,
+      r.soLuong || 1,
+      `"${r.trangThaiSauSua}"`,
+      `"${r.trangThaiHienTai}"`,
+      `"${(r.ghiChuVatTu || '').replace(/"/g, '""')}"`,
+      `"${(r.plainPrivateNote || '').replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Thong_ke_Kho_Lab_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
   };
 
@@ -675,6 +853,275 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* THỐNG KÊ KHO LAB (CHỈ HIỂN THỊ KHI ĐÃ MỞ KHÓA BẢO MẬT BẰNG MÃ PIN) */}
+      {isUnlocked && (
+        <div className="bg-gradient-to-br from-purple-950 via-slate-900 to-indigo-950 text-white p-5 sm:p-6 rounded-3xl shadow-xl border border-purple-500/30 space-y-5 animate-in fade-in duration-300">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-500/20">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0">
+                <FlaskConical className="w-5 h-5 text-purple-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-bold text-white">
+                    Quản lý & Thống kê Kho Lab
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    <span>Từ khóa ẩn #lab</span>
+                  </span>
+                </div>
+                <p className="text-xs text-purple-200 mt-0.5">
+                  Tổng hợp toàn bộ vật tư & thiết bị thuộc Kho Lab (nghiên cứu & thử nghiệm bảo mật)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={handleExportLabCSV}
+                disabled={labRecords.length === 0}
+                className="px-3 py-1.5 bg-purple-800/80 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-semibold rounded-xl border border-purple-400/30 flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-300" />
+                <span>Xuất CSV Kho Lab</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Metric Cards Kho Lab */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-purple-200 uppercase">Tổng VT Kho Lab</p>
+              <h4 className="text-xl sm:text-2xl font-black text-white mt-0.5">{labTotalQty}</h4>
+              <p className="text-[11px] text-purple-300 mt-1">
+                {labRecords.length} dòng vật tư đã phân loại
+              </p>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-emerald-300 uppercase">NK Tốt (Sẵn sàng)</p>
+              <h4 className="text-xl sm:text-2xl font-black text-emerald-300 mt-0.5">{labCountTot}</h4>
+              <p className="text-[11px] text-emerald-200/80 mt-1">
+                {labTotalQty > 0 ? Math.round((labCountTot / labTotalQty) * 100) : 0}% đạt tiêu chuẩn
+              </p>
+            </div>
+            <div className="bg-rose-500/10 border border-rose-500/20 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-rose-300 uppercase">NK Hỏng / Lỗi</p>
+              <h4 className="text-xl sm:text-2xl font-black text-rose-300 mt-0.5">{labCountHong}</h4>
+              <p className="text-[11px] text-rose-200/80 mt-1">Cần nghiên cứu thêm</p>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl">
+              <p className="text-[11px] font-semibold text-amber-300 uppercase">Đang sửa / Tạm nhận</p>
+              <h4 className="text-xl sm:text-2xl font-black text-amber-300 mt-0.5">{labCountKTT}</h4>
+              <p className="text-[11px] text-amber-200/80 mt-1">Chờ xử lý kỹ thuật</p>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-purple-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={labSearch}
+                onChange={(e) => setLabSearch(e.target.value)}
+                placeholder="Tìm Serial, tên vật tư, số chứng từ Kho Lab..."
+                className="w-full pl-9 pr-3 py-2 bg-white/10 border border-purple-400/30 rounded-xl text-xs text-white placeholder:text-purple-300/60 focus:outline-none focus:ring-2 focus:ring-purple-400/50"
+              />
+              {labSearch && (
+                <button
+                  type="button"
+                  onClick={() => setLabSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-purple-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setLabStatusFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                  labStatusFilter === 'ALL'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-white/5 text-purple-200 hover:bg-white/10'
+                }`}
+              >
+                Tất cả ({labTotalQty})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLabStatusFilter('TOT')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                  labStatusFilter === 'TOT'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-white/5 text-emerald-300 hover:bg-white/10'
+                }`}
+              >
+                Tốt ({labCountTot})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLabStatusFilter('HONG')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                  labStatusFilter === 'HONG'
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-white/5 text-rose-300 hover:bg-white/10'
+                }`}
+              >
+                Hỏng ({labCountHong})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLabStatusFilter('LOI')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                  labStatusFilter === 'LOI'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-white/5 text-amber-300 hover:bg-white/10'
+                }`}
+              >
+                Lỗi ({labRecords.filter((r) => r.trangThaiSauSua === 'LOI').reduce((s, r) => s + (Number(r.soLuong) || 1), 0)})
+              </button>
+            </div>
+          </div>
+
+          {/* Table of Lab Items */}
+          <div className="bg-black/20 rounded-2xl border border-purple-500/20 overflow-hidden">
+            <div className="overflow-x-auto max-h-96">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-white/5 text-purple-200 font-bold sticky top-0 backdrop-blur-md">
+                  <tr>
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3">Chứng từ</th>
+                    <th className="py-2.5 px-3">Ngày nhận</th>
+                    <th className="py-2.5 px-3">Tên thiết bị</th>
+                    <th className="py-2.5 px-3">Serial Number</th>
+                    <th className="py-2.5 px-2 text-center w-14">SL</th>
+                    <th className="py-2.5 px-3 text-center">Trạng thái</th>
+                    <th className="py-2.5 px-3">Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filteredLabRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-purple-200/70 text-xs italic">
+                        {labRecords.length === 0
+                          ? 'Chưa có vật tư nào được phân loại vào Kho Lab. Khi tạo phiếu nhập, gõ từ khóa #lab vào mục ghi chú chung để đưa vào Kho Lab.'
+                          : 'Không tìm thấy vật tư Kho Lab nào khớp với từ khóa tìm kiếm.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLabRecords.map((rec, i) => (
+                      <tr key={rec.itemId} className="hover:bg-white/5 transition-colors">
+                        <td className="py-2.5 px-3 text-center text-purple-300 font-bold">{i + 1}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-cyan-300">{rec.soChungTu}</td>
+                        <td className="py-2.5 px-3 text-purple-200">{rec.ngayTiepNhan}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-white">{rec.tenVT}</div>
+                          {rec.maVT && <span className="font-mono text-[10px] text-purple-300">Mã: {rec.maVT}</span>}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded">
+                            {rec.serialNumber || '—'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className="font-bold text-cyan-200 bg-cyan-950/40 border border-cyan-500/30 px-2 py-0.5 rounded">
+                            {rec.soLuong || 1}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
+                              rec.trangThaiSauSua === 'TOT'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : rec.trangThaiSauSua === 'HONG'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}
+                          >
+                            {rec.trangThaiSauSua === 'TOT' ? 'Tốt' : rec.trangThaiSauSua === 'HONG' ? 'Hỏng' : 'Lỗi'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="space-y-1">
+                            {rec.ghiChuVatTu && (
+                              <span className="text-purple-200 text-[11px] block">{rec.ghiChuVatTu}</span>
+                            )}
+                            {rec.plainPrivateNote && (
+                              <div className="inline-flex items-center gap-1 bg-indigo-900/60 border border-indigo-400/40 text-indigo-100 px-2 py-0.5 rounded text-[10px] font-medium">
+                                <Lock className="w-3 h-3 text-indigo-300" />
+                                <span>{rec.plainPrivateNote}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scope Selector Bar for General Stats (Chỉ hiển thị khi đã mở khóa PIN) */}
+      {isUnlocked && (
+        <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-xs sm:text-sm text-slate-800 flex items-center gap-1.5">
+              <FlaskConical className="w-4 h-4 text-purple-600" />
+              Phạm vi thống kê biểu đồ:
+            </span>
+            <span className="text-xs text-slate-500 hidden md:inline">
+              (Lựa chọn hiển thị số liệu theo từng kho hoặc gộp tất cả)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setWarehouseScope('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                warehouseScope === 'ALL'
+                  ? 'bg-[#004b93] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Tất cả kho ({vouchers.length} phiếu)
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarehouseScope('REPAIR')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                warehouseScope === 'REPAIR'
+                  ? 'bg-[#004b93] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Kho Sửa chữa ({vouchers.filter((v) => !v.isLab).length} phiếu)
+            </button>
+            <button
+              type="button"
+              onClick={() => setWarehouseScope('LAB')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                warehouseScope === 'LAB'
+                  ? 'bg-purple-700 text-white shadow-xs'
+                  : 'text-purple-700 hover:bg-purple-50'
+              }`}
+            >
+              <FlaskConical className="w-3.5 h-3.5" />
+              <span>Kho Lab ({vouchers.filter((v) => v.isLab).length} phiếu)</span>
+            </button>
           </div>
         </div>
       )}

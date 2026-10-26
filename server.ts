@@ -56,7 +56,7 @@ QUY TẮC HUẤN LUYỆN BẮT BUỘC:
    - Trường "canBoTiepNhan" nếu không có trên phiếu thì để chuỗi rỗng "".
 
 2. TRỌNG TÂM CỐT LÕI: NỘI DUNG BẢNG KÊ VẬT TƯ CỦA PHIẾU:
-   Trong bảng kê chi tiết vật tư của phiếu (kể cả tệp PDF nhiều trang hoặc ảnh chụp), bạn PHẢI ĐẶC BIỆT CHÚ Ý VÀ TRÍCH XUẤT CHÍNH XÁC 3 TRƯỜNG THÔNG TIN SAU CHO MỖI DÒNG THIẾT BỊ:
+   Trong bảng kê chi tiết vật tư của phiếu (kể cả tệp PDF nhiều trang, ảnh chụp hoặc bảng tính Excel), bạn PHẢI ĐẶC BIỆT CHÚ Ý VÀ TRÍCH XUẤT CHÍNH XÁC CÁC TRƯỜNG THÔNG TIN SAU CHO MỖI DÒNG THIẾT BỊ:
    (1) "Ten_VT":
        - Lấy chính xác từ cột có tiêu đề: "Tên nhãn hiệu quy cách phẩm chất vật tư ( sản phẩm hàng hóa)" hoặc "Tên, nhãn hiệu, quy cách, phẩm chất vật tư (sản phẩm, hàng hóa)" hoặc "Tên vật tư thiết bị".
        - Đọc đầy đủ tên chủng loại, nhãn hiệu, quy cách sản phẩm (ví dụ: "ONT iGate GW040-H Băng tần kép 2.4/5GHz", "Bộ phát Wifi Mesh iGate EW12SX", "Switch Cisco Catalyst 2960-24TC-L",...).
@@ -68,6 +68,10 @@ QUY TẮC HUẤN LUYỆN BẮT BUỘC:
        - QUY TẮC ĐỌC SERIAL: Số Serial (S/N) là dãy số/chữ cái dài. Hãy đọc từng ký tự thật chính xác, KHÔNG ĐƯỢC TỰ BỊA THÊM KÝ TỰ SỐ NÀO.
        - Nếu một dòng hoặc ô vật tư có nhiều Serial (ví dụ cách nhau bởi dấu phẩy, chấm phẩy, khoảng trắng hoặc xuống dòng), BẮT BUỘC TÁCH MỖI SERIAL THÀNH 1 PHẦN TỬ RIÊNG BIỆT TRONG MẢNG "danhSachVatTu" với cùng "Ten_VT" và "Ma_VT" để nhập chuẩn vào form quản lý từng thiết bị.
        - Nếu dòng đó không có số Serial, để giá trị là chuỗi rỗng "".
+   (4) "soLuong":
+       - Lấy chính xác số lượng từ cột "Số lượng", "SL", "Số lượng thực nhập", "Số lượng thực xuất", "Số lượng theo chứng từ", "Qty" hoặc "Quantity".
+       - Trả về số nguyên dương (number >= 1).
+       - TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ BỊA RA SỐ LIỆU. Nếu trên tài liệu không ghi trường số lượng hoặc là vật tư quản lý 1-1 theo Serial thì mặc định là 1.
 
 3. THÔNG TIN PHIẾU:
    - "soChungTu": Toàn bộ số phiếu / số chứng từ (ví dụ: "THA-KHO28-PNK9506", "9325/N/26/KTTC-C1-KH04", "14853/X/26/KTTC-C1-KH01").
@@ -82,6 +86,7 @@ QUY TẮC HUẤN LUYỆN BẮT BUỘC:
        + "Ten_VT": string (Tên nhãn hiệu quy cách phẩm chất vật tư)
        + "Ma_VT": string (Mã VT)
        + "Serial_Number": string (Số Serial)
+       + "soLuong": number (Số lượng vật tư, lấy chính xác theo tài liệu, mặc định 1 nếu không có)
        + "trangThaiSauSua": "TOT", "HONG", hoặc "LOI"
        + "trangThaiHienTai": "Tiếp nhận mới" (tuân thủ như lúc nhập thủ công)
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Header } from './components/Header';
 import { VoucherForm } from './components/VoucherForm';
 import { VoucherList } from './components/VoucherList';
@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 
 function MainApp() {
-  const { openStealthModal } = usePrivateVault();
+  const { openStealthModal, isUnlocked } = usePrivateVault();
   const footerClickRef = useRef(0);
   const footerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -214,13 +214,19 @@ function MainApp() {
     }
   };
 
+  // Lọc hiển thị: Khi chưa mở khóa bằng PIN, ẩn hoàn toàn các phiếu và vật tư thuộc Kho Lab
+  const visibleVouchers = useMemo(() => {
+    if (isUnlocked) return vouchers;
+    return vouchers.filter((v) => !v.isLab);
+  }, [vouchers, isUnlocked]);
+
   const handleExportCSV = () => {
-    exportVouchersToCSV(vouchers);
+    exportVouchersToCSV(visibleVouchers);
     showToast('Đã xuất file báo cáo CSV thành công');
   };
 
   const handleExportJSON = () => {
-    exportVouchersToJSON(vouchers);
+    exportVouchersToJSON(visibleVouchers);
     showToast('Đã xuất file sao lưu JSON thành công');
   };
 
@@ -242,7 +248,7 @@ function MainApp() {
         onOpenSmartScan={() => setIsSmartScanOpen(true)}
         onExportCSV={handleExportCSV}
         onResetData={handleResetSampleData}
-        totalCount={vouchers.length}
+        totalCount={visibleVouchers.length}
       />
 
       {/* Main Container */}
@@ -251,7 +257,7 @@ function MainApp() {
           <VoucherForm
             key={editingVoucher ? editingVoucher.id : 'new-form'}
             initialData={editingVoucher}
-            existingVouchers={vouchers}
+            existingVouchers={visibleVouchers}
             onSave={handleSaveVoucher}
             onCancel={() => {
               setEditingVoucher(null);
@@ -265,7 +271,7 @@ function MainApp() {
 
         {activeTab === 'list' && (
           <VoucherList
-            vouchers={vouchers}
+            vouchers={visibleVouchers}
             onSelectVoucher={(v) => setDetailVoucher(v)}
             onEditVoucher={handleEditVoucher}
             onDeleteVoucher={handleDeleteVoucher}
@@ -277,7 +283,7 @@ function MainApp() {
 
         {activeTab === 'stats' && (
           <DashboardStats
-            vouchers={vouchers}
+            vouchers={visibleVouchers}
             onExportCSV={handleExportCSV}
             onExportJSON={handleExportJSON}
             onNewVoucher={handleNewVoucher}
@@ -324,7 +330,7 @@ function MainApp() {
           <Layers className={`w-5 h-5 ${activeTab === 'list' ? 'text-[#004b93]' : 'text-slate-400'}`} />
           <span>Danh sách</span>
           <span className="absolute top-0.5 right-2 bg-[#00a3e0] text-white text-[9px] px-1 rounded-full font-bold">
-            {vouchers.length}
+            {visibleVouchers.length}
           </span>
         </button>
 
@@ -377,8 +383,8 @@ function MainApp() {
 
       {/* Voucher Detail & Print Modal */}
       <VoucherDetailModal
-        voucher={detailVoucher}
-        allVouchers={vouchers}
+        voucher={detailVoucher && (!detailVoucher.isLab || isUnlocked) ? detailVoucher : null}
+        allVouchers={visibleVouchers}
         onClose={() => setDetailVoucher(null)}
         onEdit={handleEditVoucher}
         onDelete={handleDeleteVoucher}

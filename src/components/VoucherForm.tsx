@@ -88,13 +88,17 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
   const isInitialBBBG = loaiChungTu === 'BBBG' || (loaiChungTu as string) === 'GUI_MUON';
   const [danhSachVatTu, setDanhSachVatTu] = useState<ChiTietVatTu[]>(
     initialData?.danhSachVatTu && initialData.danhSachVatTu.length > 0
-      ? initialData.danhSachVatTu
+      ? initialData.danhSachVatTu.map((item) => ({
+          ...item,
+          soLuong: item.soLuong && Number(item.soLuong) > 0 ? Number(item.soLuong) : 1,
+        }))
       : [
           {
             id: `vt-${Date.now()}-1`,
             maVT: '',
             tenVT: '',
             serialNumber: '',
+            soLuong: 1,
             trangThaiSauSua: 'TOT',
             soPNKHoanTat: '',
             trangThaiHienTai: isInitialBBBG ? 'Tạm nhận' : 'Tiếp nhận mới',
@@ -136,8 +140,10 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
 
   // Danh sách toàn bộ vật tư của các BBBG chưa hoàn thành gán trên hệ thống
   const pendingBBBGList = useMemo(() => {
-    return getAllPendingBBBGItems(existingVouchers || loadVouchers());
-  }, [existingVouchers]);
+    const raw = existingVouchers || loadVouchers();
+    const pool = isUnlocked ? raw : raw.filter((v) => !v.isLab);
+    return getAllPendingBBBGItems(pool);
+  }, [existingVouchers, isUnlocked]);
 
   // Xử lý sau khi gán PNK từ modal BBBG thành công
   const handleBBBGAssignSuccess = (
@@ -224,7 +230,8 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
     // Chỉ cảnh báo/chặn khi Serial đó đang trong trạng thái CHƯA HOÀN THÀNH quy trình trước đó:
     // - Đang ở trong BBBG có trạng thái chưa "Hoàn thành nhập kho đơn vị" (hoặc vật tư còn đang "Tạm nhận", chưa gán PNK)
     // - Hoặc đang ở trạng thái "Tiếp nhận mới" (chưa hoàn tất nhập kho / sửa chữa)
-    const allVouchers = existingVouchers || loadVouchers();
+    const rawVouchers = existingVouchers || loadVouchers();
+    const allVouchers = isUnlocked ? rawVouchers : rawVouchers.filter((v) => !v.isLab);
     const otherVouchers: { soChungTu: string; ngayTiepNhan: string; lyDo: string }[] = [];
 
     allVouchers.forEach((v: PhieuGiaoDich) => {
@@ -309,6 +316,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       maVT: '',
       tenVT: '',
       serialNumber: '',
+      soLuong: 1,
       trangThaiSauSua: 'TOT',
       soPNKHoanTat: '',
       trangThaiHienTai: isBBBG ? 'Tạm nhận' : 'Tiếp nhận mới',
@@ -323,6 +331,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       ...target,
       id: `vt-${Date.now()}-${Math.random()}`,
       serialNumber: target.serialNumber ? `${target.serialNumber}-COPY` : '',
+      soLuong: target.soLuong || 1,
     };
     const updated = [...danhSachVatTu];
     updated.splice(index + 1, 0, cloned);
@@ -405,24 +414,63 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
 
     setFormErrors([]);
 
-    // Xử lý mã hóa Private Note nếu đang ở chế độ mở khóa bảo mật
+    // Nhận diện Kho Lab thông qua từ khóa ẩn #lab trong ghi chú chung (nhập liệu trong suốt)
+    const hasLabKeywordInGhiChu = /#lab(?:\b|$)/i.test(ghiChu);
+    const isLabVoucher = Boolean(hasLabKeywordInGhiChu || initialData?.isLab);
+
+    // Tự động ẩn/lọc bỏ từ #lab đi cho gọn giao diện
+    const cleanedGhiChu = ghiChu
+      .replace(/#lab(?:\b|$)/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Xử lý mã hóa Private Note nếu đang ở chế độ mở khóa bảo mật & đồng bộ nhãn Kho Lab cho vật tư
     let finalDanhSachVatTu = danhSachVatTu;
     if (isUnlocked && activePin) {
       finalDanhSachVatTu = await Promise.all(
         danhSachVatTu.map(async (item) => {
+          const itemHasLab = item.ghiChuVatTu ? /#lab(?:\b|$)/i.test(item.ghiChuVatTu) : false;
+          const isItemLab = isLabVoucher || itemHasLab || Boolean(item.isLab);
+          const cleanedItemNote = item.ghiChuVatTu
+            ? item.ghiChuVatTu.replace(/#lab(?:\b|$)/gi, '').replace(/\s+/g, ' ').trim()
+            : item.ghiChuVatTu;
+          const itemSoLuong = isItemLab ? Math.max(1, Number(item.soLuong) || 1) : 1;
+
           if (item.privateNote && item.privateNote.trim()) {
             const cipher = await encryptNote(item.privateNote.trim());
-            return { ...item, privateNote: cipher };
+            return {
+              ...item,
+              isLab: isItemLab,
+              soLuong: itemSoLuong,
+              ghiChuVatTu: cleanedItemNote,
+              privateNote: cipher,
+            };
           }
-          return { ...item, privateNote: '' };
+          return {
+            ...item,
+            isLab: isItemLab,
+            soLuong: itemSoLuong,
+            ghiChuVatTu: cleanedItemNote,
+            privateNote: '',
+          };
         })
       );
     } else {
       // Giữ nguyên ghi chú đã mã hóa trước đó nếu người dùng khác sửa phiếu ở chế độ khóa
       finalDanhSachVatTu = danhSachVatTu.map((item) => {
         const prev = initialData?.danhSachVatTu?.find((old) => old.id === item.id);
+        const itemHasLab = item.ghiChuVatTu ? /#lab(?:\b|$)/i.test(item.ghiChuVatTu) : false;
+        const isItemLab = isLabVoucher || itemHasLab || Boolean(item.isLab || prev?.isLab);
+        const cleanedItemNote = item.ghiChuVatTu
+          ? item.ghiChuVatTu.replace(/#lab(?:\b|$)/gi, '').replace(/\s+/g, ' ').trim()
+          : item.ghiChuVatTu;
+        const itemSoLuong = isItemLab ? Math.max(1, Number(item.soLuong || prev?.soLuong) || 1) : 1;
+
         return {
           ...item,
+          isLab: isItemLab,
+          soLuong: itemSoLuong,
+          ghiChuVatTu: cleanedItemNote,
           privateNote: prev?.privateNote || item.privateNote || '',
         };
       });
@@ -435,7 +483,8 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       ngayTiepNhan,
       donViLienQuan: initialData?.donViLienQuan || donViLienQuan.trim() || 'Chờ phân bổ sau sửa chữa',
       canBoTiepNhan: canBoTiepNhan.trim(),
-      ghiChu: ghiChu.trim(),
+      ghiChu: cleanedGhiChu,
+      isLab: isLabVoucher,
       danhSachVatTu: finalDanhSachVatTu,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -455,6 +504,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
         maVT: '',
         tenVT: '',
         serialNumber: '',
+        soLuong: 1,
         trangThaiSauSua: 'TOT',
         soPNKHoanTat: '',
         trangThaiHienTai: loaiChungTu === 'BBBG' || (loaiChungTu as string) === 'GUI_MUON' ? 'Tạm nhận' : 'Tiếp nhận mới',
@@ -465,7 +515,9 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
     setTimeout(() => setSaveSuccessNotice(false), 3000);
   };
 
-  // Summary counts
+  // Summary counts & Lab mode check
+  const isLabVoucherMode = /#lab(?:\b|$)/i.test(ghiChu) || Boolean(initialData?.isLab);
+  const totalQuantity = danhSachVatTu.reduce((sum, item) => sum + (Number(item.soLuong) || 1), 0);
   const totalItems = danhSachVatTu.length;
   const duplicateItemsCount = danhSachVatTu.filter((_, idx) => getDuplicateInfo(idx).isDuplicate).length;
 
@@ -712,7 +764,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                 </span>
               )}
               <span className="bg-white/20 px-3 py-1 rounded-lg">
-                Tổng: {totalItems} thiết bị
+                Tổng: {totalQuantity} thiết bị ({totalItems} dòng)
               </span>
             </div>
           </div>
@@ -736,17 +788,22 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
           <div className="p-3 sm:p-5 space-y-3">
             <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[720px]">
+                <table className="w-full text-left border-collapse min-w-[760px]">
                   <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider">
                     <tr>
                       <th className="py-2.5 px-2.5 w-12 text-center">STT</th>
-                      <th className="py-2.5 px-3 min-w-[240px]">
+                      <th className="py-2.5 px-3 min-w-[220px]">
                         Tên nhãn hiệu quy cách vật tư <span className="text-rose-500">*</span>
                       </th>
-                      <th className="py-2.5 px-3 w-40 sm:w-44">Mã VT</th>
-                      <th className="py-2.5 px-3 w-48 sm:w-56 text-left">Số Serial (S/N)</th>
+                      <th className="py-2.5 px-3 w-36">Mã VT</th>
+                      <th className="py-2.5 px-3 w-40 sm:w-48 text-left">Số Serial (S/N)</th>
+                      <th className="py-2.5 px-2 w-20 text-center">
+                        <span title="Số lượng: Kho Lab cho phép quản lý > 1, kho sửa chữa thông thường mặc định 1">
+                          Số lượng
+                        </span>
+                      </th>
                       {isUnlocked && (
-                        <th className="py-2.5 px-3 w-56 text-left text-indigo-700 font-bold">
+                        <th className="py-2.5 px-3 w-52 text-left text-indigo-700 font-bold">
                           <div className="flex items-center gap-1">
                             <Lock className="w-3.5 h-3.5 text-indigo-600" />
                             <span>Ghi chú riêng tư</span>
@@ -759,6 +816,10 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                   <tbody className="divide-y divide-slate-100 text-xs">
                     {danhSachVatTu.map((item, index) => {
                       const dupInfo = getDuplicateInfo(index);
+                      const isItemLab =
+                        isLabVoucherMode ||
+                        (item.ghiChuVatTu ? /#lab(?:\b|$)/i.test(item.ghiChuVatTu) : false) ||
+                        Boolean(item.isLab);
 
                       return (
                         <tr
@@ -834,6 +895,29 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
                             />
                           </td>
 
+                          {/* Số lượng: Kho Lab cho phép nhập > 1, Kho sửa chữa cố định 1 */}
+                          <td className="py-2 px-2 text-center">
+                            {isItemLab ? (
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.soLuong ?? 1}
+                                onChange={(e) =>
+                                  handleUpdateItem(index, 'soLuong', Math.max(1, parseInt(e.target.value, 10) || 1))
+                                }
+                                className="w-16 h-8.5 px-1.5 text-center bg-cyan-50 border border-cyan-300 rounded-lg text-xs font-bold text-[#003870] focus:outline-none focus:ring-1 focus:ring-[#00a3e0]"
+                                title="Kho Lab: Quản lý số lượng linh hoạt"
+                              />
+                            ) : (
+                              <span
+                                className="inline-block w-12 py-1 bg-slate-100 border border-slate-200 rounded-md text-xs font-bold text-slate-500 text-center cursor-not-allowed select-none"
+                                title="Vật tư sửa chữa thông thường quản lý đơn vị 1 theo Serial"
+                              >
+                                1
+                              </span>
+                            )}
+                          </td>
+
                           {/* Ghi chú riêng tư: CHỈ HIỂN THỊ KHI ĐÃ MỞ KHÓA BẢO MẬT */}
                           {isUnlocked && (
                             <td className="py-2 px-3">
@@ -893,7 +977,7 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
           <div className="flex items-center gap-2 text-xs text-slate-500 w-full sm:w-auto">
             <Info className="w-4 h-4 text-[#00a3e0] shrink-0" />
             <span>
-              Tổng cộng <b>{totalItems}</b> thiết bị gắn với số chứng từ <b>{soChungTu}</b>
+              Tổng cộng <b>{totalQuantity}</b> thiết bị ({totalItems} dòng) gắn với số chứng từ <b>{soChungTu}</b>
               {duplicateItemsCount > 0 && (
                 <span className="text-amber-600 font-bold ml-1">
                   ({duplicateItemsCount} trùng lặp)

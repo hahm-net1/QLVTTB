@@ -29,7 +29,14 @@ export function subscribeToCloudVouchers(
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as PhieuGiaoDich;
         if (data && data.id && data.soChungTu) {
-          list.push(data);
+          const normalizedItems = (data.danhSachVatTu || []).map((it) => ({
+            ...it,
+            soLuong: it.soLuong && Number(it.soLuong) > 0 ? Number(it.soLuong) : 1,
+          }));
+          list.push({
+            ...data,
+            danhSachVatTu: normalizedItems,
+          });
         }
       });
       // Sort by creation or receipt date descending

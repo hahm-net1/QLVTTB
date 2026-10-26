@@ -15,14 +15,18 @@ export function loadVouchers(): PhieuGiaoDich[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Remove any legacy sample records
+      // Remove any legacy sample records and ensure default soLuong = 1
       const filtered = parsed.filter(
         (v) => v && v.id !== 'phieu-001' && v.id !== 'phieu-002' && v.id !== 'phieu-003'
       );
-      if (filtered.length !== parsed.length) {
-        saveVouchers(filtered);
-      }
-      return filtered;
+      const normalized = filtered.map((v) => ({
+        ...v,
+        danhSachVatTu: (v.danhSachVatTu || []).map((it: any) => ({
+          ...it,
+          soLuong: it.soLuong && Number(it.soLuong) > 0 ? Number(it.soLuong) : 1,
+        })),
+      }));
+      return normalized;
     }
     saveVouchers([]);
     return [];
@@ -127,6 +131,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
+          'Số lượng',
           'Serial Number (S/N)',
           'Hiện trạng',
           'Số PNK',
@@ -140,6 +145,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
+          'Số lượng',
           'Serial Number (S/N)',
           'Trạng thái sau sửa',
           pnkHeader,
@@ -162,6 +168,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
               v.canBoTiepNhan,
               '',
               '',
+              '1',
               '',
               '',
               '',
@@ -175,6 +182,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
               v.canBoTiepNhan,
               '',
               '',
+              '1',
               '',
               '',
               '',
@@ -194,6 +202,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
                 v.canBoTiepNhan,
                 item.maVT,
                 item.tenVT,
+                String(item.soLuong || 1),
                 item.serialNumber,
                 item.trangThaiHienTai || 'Tạm nhận',
                 item.soPNKHoanTat || '',
@@ -207,6 +216,7 @@ export function exportVouchersToCSV(vouchers: PhieuGiaoDich[], isBBBGOnly?: bool
                 v.canBoTiepNhan,
                 item.maVT,
                 item.tenVT,
+                String(item.soLuong || 1),
                 item.serialNumber,
                 isVoucherBBBG ? '' : (item.trangThaiSauSua === 'TOT' ? 'Tốt' : item.trangThaiSauSua === 'HONG' ? 'Hỏng' : item.trangThaiSauSua === 'LOI' ? 'Lỗi' : item.trangThaiSauSua || ''),
                 item.soPNKHoanTat || '',
@@ -260,6 +270,7 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
+          'Số lượng',
           'Serial Number (S/N)',
           'Hiện trạng',
           'Số PNK',
@@ -273,6 +284,7 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
           'Cán bộ tiếp nhận',
           'Mã VT',
           'Tên VT',
+          'Số lượng',
           'Serial Number (S/N)',
           'Trạng thái sau sửa',
           pnkHeader,
@@ -292,6 +304,7 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
             voucher.canBoTiepNhan,
             '',
             '',
+            '1',
             '',
             '',
             '',
@@ -305,6 +318,7 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
             voucher.canBoTiepNhan,
             '',
             '',
+            '1',
             '',
             '',
             '',
@@ -324,6 +338,7 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
               voucher.canBoTiepNhan,
               item.maVT,
               item.tenVT,
+              String(item.soLuong || 1),
               item.serialNumber,
               item.trangThaiHienTai || 'Tạm nhận',
               item.soPNKHoanTat || '',
@@ -337,6 +352,7 @@ export function exportSingleVoucherToCSV(voucher: PhieuGiaoDich): void {
               voucher.canBoTiepNhan,
               item.maVT,
               item.tenVT,
+              String(item.soLuong || 1),
               item.serialNumber,
               item.trangThaiSauSua === 'TOT' ? 'Tốt' : item.trangThaiSauSua === 'HONG' ? 'Hỏng' : item.trangThaiSauSua === 'LOI' ? 'Lỗi' : item.trangThaiSauSua || '',
               item.soPNKHoanTat || '',
