@@ -226,12 +226,23 @@ export const VoucherForm: React.FC<VoucherFormProps> = ({
       });
     }
 
+    // Nếu đang nhập liệu cho Kho tồn & Tài sản (#lab), không đối chiếu cảnh báo trùng lặp với phiếu sửa chữa
+    const isCurrentVoucherLab = /#lab(?:\b|$)/i.test(ghiChu) || Boolean(initialData?.isLab);
+    const isCurrentItemLab =
+      isCurrentVoucherLab ||
+      (item.ghiChuVatTu ? /#lab(?:\b|$)/i.test(item.ghiChuVatTu) : false) ||
+      Boolean(item.isLab);
+
     // 2. Kiểm tra với các phiếu khác trên hệ thống (tạo lịch sử vòng đời theo thời gian):
     // Chỉ cảnh báo/chặn khi Serial đó đang trong trạng thái CHƯA HOÀN THÀNH quy trình trước đó:
     // - Đang ở trong BBBG có trạng thái chưa "Hoàn thành nhập kho đơn vị" (hoặc vật tư còn đang "Tạm nhận", chưa gán PNK)
     // - Hoặc đang ở trạng thái "Tiếp nhận mới" (chưa hoàn tất nhập kho / sửa chữa)
     const rawVouchers = existingVouchers || loadVouchers();
-    const allVouchers = isUnlocked ? rawVouchers : rawVouchers.filter((v) => !v.isLab);
+    const allVouchers = isCurrentItemLab
+      ? []
+      : isUnlocked
+      ? rawVouchers
+      : rawVouchers.filter((v) => !v.isLab);
     const otherVouchers: { soChungTu: string; ngayTiepNhan: string; lyDo: string }[] = [];
 
     allVouchers.forEach((v: PhieuGiaoDich) => {

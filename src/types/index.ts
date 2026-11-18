@@ -68,3 +68,63 @@ export interface AIOCRExtractResult {
   confidenceScore?: number;
   extractedText?: string;
 }
+
+export type InventoryPhanLoai =
+  | 'CHUA_PHAN_LOAI'
+  | 'VAT_TU_TOT'
+  | 'VAT_TU_LOI'
+  | 'TAI_SAN';
+
+export type InventoryLogType =
+  | 'NHAP_MOI'
+  | 'NHAP_CHUYEN_DOI'
+  | 'XUAT_SU_DUNG'
+  | 'DIEU_CHINH'
+  | 'PHAN_LOAI'
+  | 'TACH_DONG';
+
+export interface InventoryItem {
+  id: string;
+  maVT: string;
+  tenVT: string;
+  serialNumber: string;
+  soLuongTon: number;
+  soLuongBanDau: number;
+  donViTinh: string;
+  phanLoai: InventoryPhanLoai;
+  hangSanXuat: string;
+  dongThietBi: string;
+  viTriKho: string;
+  soChungTuGoc: string;
+  loaiChungTuGoc?: LoaiChungTu;
+  ngayNhap: string;
+  canBoNhap: string;
+  ghiChu: string;
+  privateNote?: string;
+  migratedFromVoucherId?: string;
+  migratedFromItemId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryLog {
+  id: string;
+  itemId: string;
+  loaiBienDong: InventoryLogType;
+  maVT: string;
+  tenVT: string;
+  serialNumber: string;
+  hangSanXuat?: string;
+  dongThietBi?: string;
+  tuPhanLoai?: InventoryPhanLoai;
+  denPhanLoai?: InventoryPhanLoai;
+  soLuongThayDoi: number;
+  tonTruoc: number;
+  tonSau: number;
+  nguoiThucHien: string;
+  nguoiNhan?: string;
+  soChungTuThamChieu?: string;
+  lyDo: string;
+  timestamp: string;
+}
+

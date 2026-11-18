@@ -9,18 +9,20 @@ import {
   Sparkles,
   Cloud,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  Package
 } from 'lucide-react';
 import { usePrivateVault } from '../context/PrivateVaultContext';
 
 interface HeaderProps {
-  activeTab: 'form' | 'list' | 'stats';
-  setActiveTab: (tab: 'form' | 'list' | 'stats') => void;
+  activeTab: 'form' | 'list' | 'stats' | 'inventory';
+  setActiveTab: (tab: 'form' | 'list' | 'stats' | 'inventory') => void;
   onNewVoucher: () => void;
   onOpenSmartScan: () => void;
   onExportCSV: () => void;
   onResetData?: () => void;
   totalCount: number;
+  inventoryCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSmartScan,
   onExportCSV,
   totalCount,
+  inventoryCount = 0,
 }) => {
   const { isUnlocked, openStealthModal, lockVault } = usePrivateVault();
   const clickCountRef = useRef(0);
@@ -155,7 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('stats')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 py-2.5 px-4 border-b-2 transition-colors cursor-pointer ${
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 py-2.5 px-4 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
               activeTab === 'stats'
                 ? 'border-[#00a3e0] text-white font-bold bg-white/10'
                 : 'border-transparent text-cyan-100/80 hover:text-white hover:bg-white/5'
@@ -164,6 +167,23 @@ export const Header: React.FC<HeaderProps> = ({
             <BarChart3 className="w-4 h-4 text-[#00a3e0]" />
             <span>Thống kê vật tư</span>
           </button>
+
+          {isUnlocked && (
+            <button
+              onClick={() => setActiveTab('inventory')}
+              className={`flex-1 sm:flex-none flex items-center justify-center gap-2 py-2.5 px-4 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+                activeTab === 'inventory'
+                  ? 'border-amber-300 text-white font-bold bg-white/10'
+                  : 'border-transparent text-cyan-100/80 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Package className="w-4 h-4 text-amber-300" />
+              <span>Kho tồn & Tài sản</span>
+              <span className="ml-0.5 bg-white/20 text-white font-bold px-1.5 py-0.2 rounded-full text-[10px]">
+                {inventoryCount}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </header>

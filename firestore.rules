@@ -1,11 +1,47 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isValidInventoryStatus(val) {
+      return val in ['CHUA_PHAN_LOAI', 'VAT_TU_TOT', 'VAT_TU_LOI', 'TAI_SAN'];
+    }
+
+    function isValidInventoryItem(data) {
+      return data.keys().hasAll(['id', 'tenVT', 'soLuongTon', 'soLuongBanDau', 'phanLoai'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 160
+        && data.tenVT is string && data.tenVT.size() > 0 && data.tenVT.size() <= 500
+        && data.soLuongTon is number && data.soLuongTon >= 0 && data.soLuongTon <= 10000000
+        && data.soLuongBanDau is number && data.soLuongBanDau >= 0 && data.soLuongBanDau <= 10000000
+        && isValidInventoryStatus(data.phanLoai);
+    }
+
+    function isValidInventoryLog(data) {
+      return data.keys().hasAll(['id', 'itemId', 'loaiBienDong', 'tenVT', 'soLuongThayDoi', 'tonTruoc', 'tonSau', 'timestamp'])
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 160
+        && data.itemId is string && data.itemId.size() > 0 && data.itemId.size() <= 160
+        && data.loaiBienDong in ['NHAP_MOI', 'NHAP_CHUYEN_DOI', 'XUAT_SU_DUNG', 'DIEU_CHINH', 'PHAN_LOAI', 'TACH_DONG']
+        && data.tenVT is string && data.tenVT.size() <= 500
+        && data.soLuongThayDoi is number
+        && data.tonTruoc is number && data.tonTruoc >= 0
+        && data.tonSau is number && data.tonSau >= 0
+        && data.timestamp is string;
+    }
+
     match /vouchers/{voucherId} {
       allow read, write: if true;
+    }
+    match /inventory_items/{itemId} {
+      allow read: if true;
+      allow create, update: if isValidInventoryItem(request.resource.data);
+      allow delete: if true;
+    }
+    match /inventory_logs/{logId} {
+      allow read: if true;
+      allow create, update: if isValidInventoryLog(request.resource.data);
+      allow delete: if true;
     }
     match /test/{docId} {
       allow read, write: if true;
     }
   }
 }
+

@@ -20,8 +20,7 @@ import {
   ChevronRight,
   Package,
   Warehouse,
-  Clock,
-  FlaskConical
+  Clock
 } from 'lucide-react';
 import { usePrivateVault } from '../context/PrivateVaultContext';
 import { PhieuGiaoDich, LoaiChungTu } from '../types';
@@ -52,7 +51,6 @@ export const VoucherList: React.FC<VoucherListProps> = ({
   onExportCSV,
 }) => {
   const { isUnlocked } = usePrivateVault();
-  const [selectedWarehouse, setSelectedWarehouse] = useState<'ALL' | 'REPAIR' | 'LAB'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
@@ -86,10 +84,8 @@ export const VoucherList: React.FC<VoucherListProps> = ({
   // Filter logic
   const filteredVouchers = vouchers
     .filter((v) => {
-      // Bảo mật Chế độ ẩn (Stealth): Ẩn hoàn toàn phiếu Kho Lab nếu chưa mở khóa PIN
-      if (!isUnlocked && v.isLab) return false;
-      if (isUnlocked && selectedWarehouse === 'LAB' && !v.isLab) return false;
-      if (isUnlocked && selectedWarehouse === 'REPAIR' && v.isLab) return false;
+      // Phiếu Kho tồn & Tài sản (#lab) được quản lý độc lập ở tab Kho tồn & Tài sản
+      if (v.isLab) return false;
 
       // Type filter
       if (selectedType !== 'ALL') {
@@ -335,52 +331,6 @@ export const VoucherList: React.FC<VoucherListProps> = ({
             )}
           </div>
         </div>
-
-        {/* BỘ LỌC KHO LAB (CHỈ HIỂN THỊ KHI ĐÃ MỞ KHÓA BẢO MẬT BẰNG MÃ PIN) */}
-        {isUnlocked && (
-          <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-purple-100/70 text-xs animate-in fade-in">
-            <span className="font-bold text-purple-900 flex items-center gap-1 shrink-0">
-              <FlaskConical className="w-3.5 h-3.5 text-purple-600" />
-              Kho lưu trữ:
-            </span>
-            <div className="flex items-center gap-1 bg-purple-50/80 p-1 rounded-xl border border-purple-200/70">
-              <button
-                type="button"
-                onClick={() => setSelectedWarehouse('ALL')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  selectedWarehouse === 'ALL'
-                    ? 'bg-purple-700 text-white shadow-2xs'
-                    : 'text-purple-800 hover:bg-white/70'
-                }`}
-              >
-                Tất cả kho ({vouchers.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedWarehouse('REPAIR')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  selectedWarehouse === 'REPAIR'
-                    ? 'bg-purple-700 text-white shadow-2xs'
-                    : 'text-purple-800 hover:bg-white/70'
-                }`}
-              >
-                Kho Sửa chữa ({vouchers.filter((v) => !v.isLab).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedWarehouse('LAB')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 ${
-                  selectedWarehouse === 'LAB'
-                    ? 'bg-purple-700 text-white shadow-2xs'
-                    : 'text-purple-800 hover:bg-white/70'
-                }`}
-              >
-                <FlaskConical className="w-3 h-3" />
-                <span>Kho Lab ({vouchers.filter((v) => v.isLab).length})</span>
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* List Header Count */}
@@ -432,12 +382,6 @@ export const VoucherList: React.FC<VoucherListProps> = ({
                     <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border shrink-0 ${badge.bg} ${badge.border}`}>
                       {badge.label}
                     </span>
-                    {isUnlocked && voucher.isLab && (
-                      <span className="px-2 py-0.5 rounded-lg text-xs font-bold border shrink-0 bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1 shadow-2xs">
-                        <FlaskConical className="w-3 h-3 text-purple-600" />
-                        <span>Kho Lab</span>
-                      </span>
-                    )}
                     <span className="font-mono text-sm sm:text-base font-extrabold text-[#004b93] group-hover:text-[#00a3e0] transition-colors truncate">
                       {voucher.soChungTu}
                     </span>

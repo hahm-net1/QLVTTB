@@ -5,6 +5,7 @@ import { VoucherList } from './components/VoucherList';
 import { DashboardStats } from './components/DashboardStats';
 import { SmartScanModal } from './components/SmartScanModal';
 import { VoucherDetailModal } from './components/VoucherDetailModal';
+import { InventoryTab } from './components/InventoryTab';
 import { PrivateVaultProvider, usePrivateVault } from './context/PrivateVaultContext';
 import { 
   loadVouchers, 
@@ -24,7 +25,23 @@ import {
   deleteVoucherFromCloud, 
   clearAllCloudVouchers 
 } from './services/voucherSync';
-import { PhieuGiaoDich } from './types';
+import {
+  loadInventoryItems,
+  saveInventoryItems,
+  loadInventoryLogs,
+  saveInventoryLogs,
+  getMigratedVoucherIds,
+  markVouchersAsMigrated,
+} from './utils/inventoryStorage';
+import {
+  subscribeToInventoryItems,
+  subscribeToInventoryLogs,
+  buildInventoryFromVoucherItems,
+  saveInventoryItemsAndLogsToCloud,
+  deleteInventoryItemFromCloud,
+  migrateLabVouchersToCloud,
+} from './services/inventorySync';
+import { PhieuGiaoDich, InventoryItem, InventoryLog } from './types';
 import { getVoucherPrefix } from './utils/formatters';
 import { 
   FileText, 
@@ -35,7 +52,8 @@ import {
   CheckCircle,
   HelpCircle,
   PhoneCall,
-  Cloud
+  Cloud,
+  Package
 } from 'lucide-react';
 
 function MainApp() {
@@ -55,24 +73,42 @@ function MainApp() {
       footerClickRef.current = 0;
     }, 2000);
   };
-  const [activeTab, setActiveTab] = useState<'form' | 'list' | 'stats'>('list');
+  const [activeTab, setActiveTab] = useState<'form' | 'list' | 'stats' | 'inventory'>('list');
   const [vouchers, setVouchers] = useState<PhieuGiaoDich[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>([]);
   const [editingVoucher, setEditingVoucher] = useState<PhieuGiaoDich | null>(null);
   const [detailVoucher, setDetailVoucher] = useState<PhieuGiaoDich | null>(null);
   const [isSmartScanOpen, setIsSmartScanOpen] = useState(false);
   const [scanSessionKey, setScanSessionKey] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const migratingRef = useRef(false);
 
-  // Load vouchers from local cache and subscribe to Firestore realtime updates
+  // Force return to public tab immediately if vault is locked while on inventory tab
+  useEffect(() => {
+    if (!isUnlocked && activeTab === 'inventory') {
+      setActiveTab('list');
+    }
+  }, [isUnlocked, activeTab]);
+
+  // Load vouchers & inventory from local cache and subscribe to Firestore realtime updates
   useEffect(() => {
     // 1. Initial fast local load
     const initialLocal = loadVouchers();
     if (initialLocal.length > 0) {
       setVouchers(initialLocal);
     }
+    const initialInv = loadInventoryItems();
+    if (initialInv.length > 0) {
+      setInventoryItems(initialInv);
+    }
+    const initialLogs = loadInventoryLogs();
+    if (initialLogs.length > 0) {
+      setInventoryLogs(initialLogs);
+    }
 
     // 2. Realtime subscription to Firebase Firestore
-    const unsubscribe = subscribeToCloudVouchers(
+    const unsubscribeVouchers = subscribeToCloudVouchers(
       (cloudVouchers) => {
         setVouchers(cloudVouchers);
         saveVouchers(cloudVouchers);
@@ -82,10 +118,82 @@ function MainApp() {
       }
     );
 
+    const unsubscribeItems = subscribeToInventoryItems(
+      (cloudItems) => {
+        setInventoryItems(cloudItems);
+        saveInventoryItems(cloudItems);
+      },
+      (err) => {
+        console.error('Inventory items sync notice:', err);
+      }
+    );
+
+    const unsubscribeLogs = subscribeToInventoryLogs(
+      (cloudLogs) => {
+        setInventoryLogs(cloudLogs);
+        saveInventoryLogs(cloudLogs);
+      },
+      (err) => {
+        console.error('Inventory logs sync notice:', err);
+      }
+    );
+
     return () => {
-      unsubscribe();
+      unsubscribeVouchers();
+      unsubscribeItems();
+      unsubscribeLogs();
     };
   }, []);
+
+  // Tự động chuyển đổi các phiếu #lab cũ sang Kho tồn & Tài sản (idempotent, giữ nguyên Private Note AES-256)
+  useEffect(() => {
+    if (migratingRef.current || vouchers.length === 0) return;
+    const migratedSet = getMigratedVoucherIds();
+    const candidates = vouchers.filter((v) => {
+      if (migratedSet.has(v.id)) return false;
+      return Boolean(v.isLab) || (v.danhSachVatTu || []).some((it) => Boolean(it.isLab));
+    });
+
+    if (candidates.length === 0) return;
+    migratingRef.current = true;
+
+    (async () => {
+      try {
+        const res = await migrateLabVouchersToCloud(candidates);
+        if (res.migratedVoucherIds.length > 0) {
+          markVouchersAsMigrated(res.migratedVoucherIds);
+
+          // Optimistic local sync for both inventory and vouchers
+          if (res.createdItems.length > 0) {
+            const mergedItems = [...res.createdItems, ...loadInventoryItems().filter((i) => !res.createdItems.some((c) => c.id === i.id))];
+            saveInventoryItems(mergedItems);
+            setInventoryItems(mergedItems);
+          }
+          if (res.createdLogs.length > 0) {
+            const mergedLogs = [...res.createdLogs, ...loadInventoryLogs().filter((l) => !res.createdLogs.some((c) => c.id === l.id))];
+            saveInventoryLogs(mergedLogs);
+            setInventoryLogs(mergedLogs);
+          }
+
+          const deletedSet = new Set(res.deletedVoucherIds);
+          const partialMap = new Map(res.updatedPartialVouchers.map((u) => [u.id, u]));
+          const nextVouchers = loadVouchers()
+            .filter((v) => !deletedSet.has(v.id))
+            .map((v) => partialMap.get(v.id) || v);
+          saveVouchers(nextVouchers);
+          setVouchers(nextVouchers);
+
+          if (isUnlocked && res.createdItems.length > 0) {
+            showToast(`Đã tự động chuyển ${res.createdItems.length} vật tư #lab cũ sang Kho tồn & Tài sản.`);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi tự động chuyển đổi phiếu #lab:', err);
+      } finally {
+        migratingRef.current = false;
+      }
+    })();
+  }, [vouchers, isUnlocked]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -100,11 +208,93 @@ function MainApp() {
     setActiveTab('form');
   };
 
+  const handleSaveInventoryItemsAndLogs = async (
+    itemsToSave: InventoryItem[],
+    logsToSave: InventoryLog[]
+  ) => {
+    // Optimistic local merge
+    const itemMap = new Map(loadInventoryItems().map((i) => [i.id, i]));
+    itemsToSave.forEach((i) => itemMap.set(i.id, i));
+    const nextItems = Array.from(itemMap.values()).sort(
+      (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+    );
+    saveInventoryItems(nextItems);
+    setInventoryItems(nextItems);
+
+    if (logsToSave.length > 0) {
+      const logMap = new Map(loadInventoryLogs().map((l) => [l.id, l]));
+      logsToSave.forEach((l) => logMap.set(l.id, l));
+      const nextLogs = Array.from(logMap.values()).sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      saveInventoryLogs(nextLogs);
+      setInventoryLogs(nextLogs);
+    }
+
+    try {
+      await saveInventoryItemsAndLogsToCloud(itemsToSave, logsToSave);
+    } catch (err) {
+      console.error('Lỗi đồng bộ Kho tồn & Tài sản lên Cloud:', err);
+      showToast('Đã lưu cục bộ (đang ngoại tuyến)');
+    }
+  };
+
+  const handleDeleteInventoryItem = async (id: string) => {
+    const nextItems = loadInventoryItems().filter((i) => i.id !== id);
+    saveInventoryItems(nextItems);
+    setInventoryItems(nextItems);
+    try {
+      await deleteInventoryItemFromCloud(id);
+    } catch (err) {
+      console.error('Lỗi xóa vật tư tồn kho trên Cloud:', err);
+    }
+  };
+
   const handleSaveVoucher = async (savedVoucher: PhieuGiaoDich) => {
     // Reset toàn bộ phiên quét và upload trước đó khi lưu chứng từ
     setScanSessionKey((prev) => prev + 1);
 
-    // Optimistic local update
+    // Rẽ nhánh theo từ khóa ẩn #lab: chuyển thẳng sang Kho tồn & Tài sản độc lập (không lưu vào phiếu sửa chữa)
+    const allItems = savedVoucher.danhSachVatTu || [];
+    const labItems = savedVoucher.isLab ? allItems : allItems.filter((it) => Boolean(it.isLab));
+    const repairItems = savedVoucher.isLab ? [] : allItems.filter((it) => !it.isLab);
+
+    if (labItems.length > 0 || savedVoucher.isLab) {
+      const { items: invItems, logs: invLogs } = buildInventoryFromVoucherItems(
+        savedVoucher,
+        labItems,
+        { isMigration: false }
+      );
+      await handleSaveInventoryItemsAndLogs(invItems, invLogs);
+
+      if (repairItems.length === 0) {
+        // Nếu người dùng đang sửa 1 phiếu cũ rồi gắn #lab để chuyển sang Kho tồn, xóa khỏi /vouchers nếu tồn tại
+        const existingInVouchers = vouchers.some((v) => v.id === savedVoucher.id);
+        if (existingInVouchers) {
+          const updatedV = deleteVoucher(savedVoucher.id);
+          setVouchers(updatedV);
+          try {
+            await deleteVoucherFromCloud(savedVoucher.id);
+          } catch {}
+        }
+        setEditingVoucher(null);
+        showToast(
+          isUnlocked
+            ? `Đã chuyển ${invItems.length} dòng từ phiếu ${savedVoucher.soChungTu} vào Kho tồn & Tài sản!`
+            : `Đã lưu phiếu ${savedVoucher.soChungTu}!`
+        );
+        return;
+      }
+
+      // Trường hợp hiếm: cùng phiếu có cả dòng #lab và dòng sửa chữa thường -> chỉ giữ dòng sửa chữa trong /vouchers
+      savedVoucher = {
+        ...savedVoucher,
+        isLab: false,
+        danhSachVatTu: repairItems,
+      };
+    }
+
+    // Luồng phiếu sửa chữa thông thường (giữ nguyên 100%)
     const updated = saveOrUpdateVoucher(savedVoucher);
     setVouchers(updated);
     if (detailVoucher && detailVoucher.id === savedVoucher.id) {
@@ -214,11 +404,10 @@ function MainApp() {
     }
   };
 
-  // Lọc hiển thị: Khi chưa mở khóa bằng PIN, ẩn hoàn toàn các phiếu và vật tư thuộc Kho Lab
+  // Danh sách phiếu sửa chữa công khai (Kho tồn & Tài sản #lab được tách riêng hoàn toàn)
   const visibleVouchers = useMemo(() => {
-    if (isUnlocked) return vouchers;
     return vouchers.filter((v) => !v.isLab);
-  }, [vouchers, isUnlocked]);
+  }, [vouchers]);
 
   const handleExportCSV = () => {
     exportVouchersToCSV(visibleVouchers);
@@ -249,6 +438,7 @@ function MainApp() {
         onExportCSV={handleExportCSV}
         onResetData={handleResetSampleData}
         totalCount={visibleVouchers.length}
+        inventoryCount={inventoryItems.filter((i) => i.soLuongTon > 0).length}
       />
 
       {/* Main Container */}
@@ -287,6 +477,16 @@ function MainApp() {
             onExportCSV={handleExportCSV}
             onExportJSON={handleExportJSON}
             onNewVoucher={handleNewVoucher}
+          />
+        )}
+
+        {activeTab === 'inventory' && isUnlocked && (
+          <InventoryTab
+            items={inventoryItems}
+            logs={inventoryLogs}
+            onSaveItemsAndLogs={handleSaveInventoryItemsAndLogs}
+            onDeleteItem={handleDeleteInventoryItem}
+            onShowToast={showToast}
           />
         )}
       </main>
@@ -345,6 +545,23 @@ function MainApp() {
           <BarChart3 className={`w-5 h-5 ${activeTab === 'stats' ? 'text-[#004b93]' : 'text-slate-400'}`} />
           <span>Thống kê</span>
         </button>
+
+        {isUnlocked && (
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`flex flex-col items-center py-1 px-3 rounded-xl transition-colors cursor-pointer relative ${
+              activeTab === 'inventory'
+                ? 'text-[#004b93] font-bold'
+                : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Package className={`w-5 h-5 ${activeTab === 'inventory' ? 'text-[#004b93]' : 'text-slate-400'}`} />
+            <span>Kho tồn</span>
+            <span className="absolute top-0.5 right-1.5 bg-amber-500 text-white text-[9px] px-1 rounded-full font-bold">
+              {inventoryItems.filter((i) => i.soLuongTon > 0).length}
+            </span>
+          </button>
+        )}
       </nav>
 
       {/* Footer */}
